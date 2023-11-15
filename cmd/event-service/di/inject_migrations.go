@@ -2,7 +2,7 @@ package di
 
 import (
 	"github.com/google/wire"
-	"github.com/planetary-social/nos-event-service/migrations"
+	"github.com/planetary-social/nos-event-service/internal/migrations"
 	"github.com/planetary-social/nos-event-service/service/adapters"
 	"github.com/planetary-social/nos-event-service/service/adapters/sqlite"
 )

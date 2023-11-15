@@ -3,9 +3,9 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"github.com/planetary-social/nos-event-service/internal/migrations"
 
 	"github.com/boreq/errors"
-	"github.com/planetary-social/nos-event-service/migrations"
 )
 
 func NewMigrations(fns *MigrationFns) (migrations.Migrations, error) {

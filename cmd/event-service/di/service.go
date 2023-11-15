@@ -2,10 +2,10 @@ package di
 
 import (
 	"context"
+	"github.com/planetary-social/nos-event-service/internal/migrations"
 
 	"github.com/boreq/errors"
 	"github.com/hashicorp/go-multierror"
-	"github.com/planetary-social/nos-event-service/migrations"
 	"github.com/planetary-social/nos-event-service/service/app"
 	"github.com/planetary-social/nos-event-service/service/ports/http"
 	"github.com/planetary-social/nos-event-service/service/ports/memorypubsub"

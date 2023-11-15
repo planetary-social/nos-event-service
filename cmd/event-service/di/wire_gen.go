@@ -9,12 +9,12 @@ package di
 import (
 	"context"
 	"database/sql"
+	"github.com/planetary-social/nos-event-service/internal/migrations"
 	"testing"
 
 	"github.com/google/wire"
 	"github.com/planetary-social/nos-event-service/internal/fixtures"
 	"github.com/planetary-social/nos-event-service/internal/logging"
-	"github.com/planetary-social/nos-event-service/migrations"
 	"github.com/planetary-social/nos-event-service/service/adapters"
 	"github.com/planetary-social/nos-event-service/service/adapters/memorypubsub"
 	"github.com/planetary-social/nos-event-service/service/adapters/prometheus"

@@ -1,10 +1,10 @@
 package sqlite_test
 
 import (
+	"github.com/planetary-social/nos-event-service/internal/migrations"
 	"testing"
 
 	"github.com/planetary-social/nos-event-service/internal/fixtures"
-	"github.com/planetary-social/nos-event-service/migrations"
 	"github.com/stretchr/testify/require"
 )
 
