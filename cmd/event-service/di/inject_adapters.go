@@ -40,6 +40,9 @@ var sqliteTxAdaptersSet = wire.NewSet(
 
 	sqlite.NewRelayRepository,
 	wire.Bind(new(app.RelayRepository), new(*sqlite.RelayRepository)),
+
+	sqlite.NewContactRepository,
+	wire.Bind(new(app.ContactRepository), new(*sqlite.ContactRepository)),
 )
 
 var adaptersSet = wire.NewSet(

@@ -106,4 +106,7 @@ var downloaderSet = wire.NewSet(
 var domainSet = wire.NewSet(
 	domain.NewRelaysExtractor,
 	wire.Bind(new(app.RelaysExtractor), new(*domain.RelaysExtractor)),
+
+	domain.NewContactsExtractor,
+	wire.Bind(new(app.ContactsExtractor), new(*domain.ContactsExtractor)),
 )

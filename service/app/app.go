@@ -3,7 +3,12 @@ package app
 import (
 	"context"
 
+	"github.com/boreq/errors"
 	"github.com/planetary-social/nos-event-service/service/domain"
+)
+
+var (
+	ErrNoContactsEvent = errors.New("no contacts event")
 )
 
 type TransactionProvider interface {
@@ -13,6 +18,7 @@ type TransactionProvider interface {
 type Adapters struct {
 	Events    EventRepository
 	Relays    RelayRepository
+	Contacts  ContactRepository
 	Publisher Publisher
 }
 
@@ -24,6 +30,14 @@ type EventRepository interface {
 type RelayRepository interface {
 	Save(ctx context.Context, eventID domain.EventId, relayAddress domain.MaybeRelayAddress) error
 	List(ctx context.Context) ([]domain.MaybeRelayAddress, error)
+}
+
+type ContactRepository interface {
+	// GetCurrentContactsEvent returns ErrNoContactsEvent if contacts haven't
+	// been for this author yet.
+	GetCurrentContactsEvent(ctx context.Context, author domain.PublicKey) (domain.Event, error)
+
+	SetContacts(ctx context.Context, event domain.Event, contacts []domain.PublicKey) error
 }
 
 type Publisher interface {
@@ -74,4 +88,11 @@ type ApplicationCall interface {
 
 type RelaysExtractor interface {
 	Extract(event domain.Event) ([]domain.MaybeRelayAddress, error)
+}
+
+type ContactsExtractor interface {
+	// Extract returns domain.ErrNotContactsEvent if the event isn't an event
+	// that normally contains contacts. This is to distinguish between events
+	// that contain zero contacts and events that don't ever contain contacts.
+	Extract(event domain.Event) ([]domain.PublicKey, error)
 }

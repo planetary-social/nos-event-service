@@ -19,7 +19,8 @@ func TestContactsExtractor(t *testing.T) {
 		Kind domain.EventKind
 		Tags []domain.EventTag
 
-		Result []domain.PublicKey
+		Result        []domain.PublicKey
+		ExpectedErrIs error
 	}{
 		{
 			Name: "contacts",
@@ -38,6 +39,16 @@ func TestContactsExtractor(t *testing.T) {
 				publicKey1,
 				publicKey2,
 			},
+			ExpectedErrIs: nil,
+		},
+		{
+			Name: "not_contacts",
+
+			Kind: domain.EventKindNote,
+			Tags: nil,
+
+			Result:        nil,
+			ExpectedErrIs: domain.ErrNotContactsEvent,
 		},
 	}
 
@@ -49,17 +60,21 @@ func TestContactsExtractor(t *testing.T) {
 			extractor := domain.NewContactsExtractor(logger)
 
 			result, err := extractor.Extract(event)
-			require.NoError(t, err)
+			if testCase.ExpectedErrIs != nil {
+				require.ErrorIs(t, err, testCase.ExpectedErrIs)
+			} else {
+				require.NoError(t, err)
 
-			sort.Slice(result, func(i, j int) bool {
-				return result[i].Hex() < result[j].Hex()
-			})
+				sort.Slice(result, func(i, j int) bool {
+					return result[i].Hex() < result[j].Hex()
+				})
 
-			sort.Slice(testCase.Result, func(i, j int) bool {
-				return testCase.Result[i].Hex() < testCase.Result[j].Hex()
-			})
+				sort.Slice(testCase.Result, func(i, j int) bool {
+					return testCase.Result[i].Hex() < testCase.Result[j].Hex()
+				})
 
-			require.Equal(t, testCase.Result, result)
+				require.Equal(t, testCase.Result, result)
+			}
 		})
 	}
 }

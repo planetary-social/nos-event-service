@@ -92,6 +92,28 @@ func SomeEvent() domain.Event {
 	return event
 }
 
+func SomeEventWithAuthor(sk string) domain.Event {
+	libevent := nostr.Event{
+		Kind: internal.RandomElement([]domain.EventKind{domain.EventKindContacts, domain.EventKindNote, domain.EventKindMetadata}).Int(),
+		Tags: []nostr.Tag{
+			{SomeString(), SomeString()},
+		},
+		Content: SomeString(),
+	}
+
+	err := libevent.Sign(sk)
+	if err != nil {
+		panic(err)
+	}
+
+	event, err := domain.NewEvent(libevent)
+	if err != nil {
+		panic(err)
+	}
+
+	return event
+}
+
 func Event(kind domain.EventKind, tags []domain.EventTag, content string) domain.Event {
 	libevent := nostr.Event{
 		Kind:    kind.Int(),

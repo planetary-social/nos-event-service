@@ -13,9 +13,10 @@ import (
 )
 
 type TestAdapters struct {
-	EventRepository *EventRepository
-	RelayRepository *RelayRepository
-	Publisher       *Publisher
+	EventRepository   *EventRepository
+	RelayRepository   *RelayRepository
+	ContactRepository *ContactRepository
+	Publisher         *Publisher
 }
 
 type TestedItems struct {

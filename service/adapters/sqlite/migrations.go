@@ -59,6 +59,41 @@ func (m *MigrationFns) Initial(ctx context.Context, state migrations.State, save
 		return errors.Wrap(err, "error creating the relays table")
 	}
 
+	_, err = m.db.Exec(`
+		CREATE TABLE IF NOT EXISTS public_keys (
+		    id INTEGER PRIMARY KEY,
+			public_key TEXT UNIQUE
+		);`,
+	)
+	if err != nil {
+		return errors.Wrap(err, "error creating the public_keys table")
+	}
+
+	_, err = m.db.Exec(`
+		CREATE TABLE IF NOT EXISTS contacts_events (
+		    follower_id INTEGER PRIMARY KEY,
+		    event_id INTEGER UNIQUE,
+			FOREIGN KEY(follower_id) REFERENCES public_keys(id),
+			FOREIGN KEY(event_id) REFERENCES events(id)
+		);`,
+	)
+	if err != nil {
+		return errors.Wrap(err, "error creating the contacts_events table")
+	}
+
+	_, err = m.db.Exec(`
+		CREATE TABLE IF NOT EXISTS contacts_followees (
+		    follower_id INTEGER,
+		    followee_id INTEGER,
+			PRIMARY KEY(follower_id, followee_id),
+			FOREIGN KEY(follower_id) REFERENCES public_keys(id),
+			FOREIGN KEY(followee_id) REFERENCES public_keys(id)
+		);`,
+	)
+	if err != nil {
+		return errors.Wrap(err, "error creating the contacts_followees table")
+	}
+
 	return nil
 }
 

@@ -52,6 +52,7 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	}
 	saveReceivedEventHandler := app.NewSaveReceivedEventHandler(genericTransactionProvider, logger, prometheusPrometheus)
 	relaysExtractor := domain.NewRelaysExtractor(logger)
+	contactsExtractor := domain.NewContactsExtractor(logger)
 	watermillAdapter := logging.NewWatermillAdapter(logger)
 	publisher, err := gcp.NewWatermillPublisher(configConfig, watermillAdapter)
 	if err != nil {
@@ -61,7 +62,7 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	gcpPublisher := gcp.NewPublisher(publisher)
 	noopPublisher := gcp.NewNoopPublisher()
 	externalEventPublisher := selectExternalPublisher(configConfig, gcpPublisher, noopPublisher)
-	processSavedEventHandler := app.NewProcessSavedEventHandler(genericTransactionProvider, relaysExtractor, externalEventPublisher, logger, prometheusPrometheus)
+	processSavedEventHandler := app.NewProcessSavedEventHandler(genericTransactionProvider, relaysExtractor, contactsExtractor, externalEventPublisher, logger, prometheusPrometheus)
 	application := app.Application{
 		SaveReceivedEvent: saveReceivedEventHandler,
 		ProcessSavedEvent: processSavedEventHandler,
@@ -149,12 +150,14 @@ func buildTransactionSqliteAdapters(db *sql.DB, tx *sql.Tx, diBuildTransactionSq
 		return app.Adapters{}, err
 	}
 	relayRepository := sqlite.NewRelayRepository(tx)
+	contactRepository := sqlite.NewContactRepository(tx)
 	logger := diBuildTransactionSqliteAdaptersDependencies.Logger
 	pubSub := sqlite.NewPubSub(db, logger)
 	publisher := sqlite.NewPublisher(pubSub, tx)
 	appAdapters := app.Adapters{
 		Events:    eventRepository,
 		Relays:    relayRepository,
+		Contacts:  contactRepository,
 		Publisher: publisher,
 	}
 	return appAdapters, nil
@@ -166,13 +169,15 @@ func buildTestTransactionSqliteAdapters(db *sql.DB, tx *sql.Tx, diBuildTransacti
 		return sqlite.TestAdapters{}, err
 	}
 	relayRepository := sqlite.NewRelayRepository(tx)
+	contactRepository := sqlite.NewContactRepository(tx)
 	logger := diBuildTransactionSqliteAdaptersDependencies.Logger
 	pubSub := sqlite.NewPubSub(db, logger)
 	publisher := sqlite.NewPublisher(pubSub, tx)
 	testAdapters := sqlite.TestAdapters{
-		EventRepository: eventRepository,
-		RelayRepository: relayRepository,
-		Publisher:       publisher,
+		EventRepository:   eventRepository,
+		RelayRepository:   relayRepository,
+		ContactRepository: contactRepository,
+		Publisher:         publisher,
 	}
 	return testAdapters, nil
 }
@@ -189,4 +194,4 @@ type buildTransactionSqliteAdaptersDependencies struct {
 
 var downloaderSet = wire.NewSet(app.NewRelayDownloaderFactory, app.NewDownloader, relays.NewBootstrapRelaySource, wire.Bind(new(app.BootstrapRelaySource), new(*relays.BootstrapRelaySource)), app.NewDatabaseRelaySource, wire.Bind(new(app.RelaySource), new(*app.DatabaseRelaySource)), relays.NewRelayConnections, wire.Bind(new(app.RelayConnections), new(*relays.RelayConnections)))
 
-var domainSet = wire.NewSet(domain.NewRelaysExtractor, wire.Bind(new(app.RelaysExtractor), new(*domain.RelaysExtractor)))
+var domainSet = wire.NewSet(domain.NewRelaysExtractor, wire.Bind(new(app.RelaysExtractor), new(*domain.RelaysExtractor)), domain.NewContactsExtractor, wire.Bind(new(app.ContactsExtractor), new(*domain.ContactsExtractor)))
