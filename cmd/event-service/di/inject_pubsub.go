@@ -1,6 +1,8 @@
 package di
 
 import (
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/boreq/errors"
 	"github.com/google/wire"
 	"github.com/planetary-social/nos-event-service/service/adapters/gcp"
 	"github.com/planetary-social/nos-event-service/service/adapters/memorypubsub"
@@ -31,14 +33,18 @@ var sqliteTxPubsubSet = wire.NewSet(
 
 var externalPubsubSet = wire.NewSet(
 	gcp.NewNoopPublisher,
-	gcp.NewPublisher,
-	gcp.NewWatermillPublisher,
 	selectExternalPublisher,
 )
 
-func selectExternalPublisher(conf config.Config, real *gcp.Publisher, noop *gcp.NoopPublisher) app.ExternalEventPublisher {
+func selectExternalPublisher(conf config.Config, logger watermill.LoggerAdapter, noop *gcp.NoopPublisher) (app.ExternalEventPublisher, error) {
 	if conf.Environment() == config.EnvironmentDevelopment {
-		return noop
+		return noop, nil
 	}
-	return real
+
+	watermillPublisher, err := gcp.NewWatermillPublisher(conf, logger)
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating watermill publisher")
+	}
+
+	return gcp.NewPublisher(watermillPublisher), nil
 }

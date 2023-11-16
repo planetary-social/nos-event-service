@@ -54,14 +54,12 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	relaysExtractor := domain.NewRelaysExtractor(logger)
 	contactsExtractor := domain.NewContactsExtractor(logger)
 	watermillAdapter := logging.NewWatermillAdapter(logger)
-	publisher, err := gcp.NewWatermillPublisher(configConfig, watermillAdapter)
+	noopPublisher := gcp.NewNoopPublisher()
+	externalEventPublisher, err := selectExternalPublisher(configConfig, watermillAdapter, noopPublisher)
 	if err != nil {
 		cleanup()
 		return Service{}, nil, err
 	}
-	gcpPublisher := gcp.NewPublisher(publisher)
-	noopPublisher := gcp.NewNoopPublisher()
-	externalEventPublisher := selectExternalPublisher(configConfig, gcpPublisher, noopPublisher)
 	processSavedEventHandler := app.NewProcessSavedEventHandler(genericTransactionProvider, relaysExtractor, contactsExtractor, externalEventPublisher, logger, prometheusPrometheus)
 	application := app.Application{
 		SaveReceivedEvent: saveReceivedEventHandler,
