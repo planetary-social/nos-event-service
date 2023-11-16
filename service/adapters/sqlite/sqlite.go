@@ -3,17 +3,18 @@ package sqlite
 import (
 	"context"
 	"database/sql"
-	"github.com/planetary-social/nos-event-service/internal/migrations"
 
 	"github.com/boreq/errors"
 	"github.com/hashicorp/go-multierror"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/planetary-social/nos-event-service/internal/migrations"
 	"github.com/planetary-social/nos-event-service/service/app"
 	"github.com/planetary-social/nos-event-service/service/config"
 )
 
 type TestAdapters struct {
 	EventRepository *EventRepository
+	RelayRepository *RelayRepository
 	Publisher       *Publisher
 }
 

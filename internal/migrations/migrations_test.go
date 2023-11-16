@@ -3,12 +3,12 @@ package migrations_test
 import (
 	"context"
 	"fmt"
-	"github.com/planetary-social/nos-event-service/internal/migrations"
 	"testing"
 
 	"github.com/planetary-social/nos-event-service/internal"
 	"github.com/planetary-social/nos-event-service/internal/fixtures"
 	"github.com/planetary-social/nos-event-service/internal/logging"
+	"github.com/planetary-social/nos-event-service/internal/migrations"
 	"github.com/stretchr/testify/require"
 )
 

@@ -17,33 +17,31 @@ func NewProcessSavedEvent(id domain.EventId) ProcessSavedEvent {
 }
 
 type ProcessSavedEventHandler struct {
-	transactionProvider TransactionProvider
-	relaysExtractor     RelaysExtractor
-	logger              logging.Logger
-	metrics             Metrics
+	transactionProvider    TransactionProvider
+	relaysExtractor        RelaysExtractor
+	ExternalEventPublisher ExternalEventPublisher
+	logger                 logging.Logger
+	metrics                Metrics
 }
 
 func NewProcessSavedEventHandler(
 	transactionProvider TransactionProvider,
 	relaysExtractor RelaysExtractor,
+	externalEventPublisher ExternalEventPublisher,
 	logger logging.Logger,
 	metrics Metrics,
 ) *ProcessSavedEventHandler {
 	return &ProcessSavedEventHandler{
-		transactionProvider: transactionProvider,
-		relaysExtractor:     relaysExtractor,
-		logger:              logger.New("processSavedEventHandler"),
-		metrics:             metrics,
+		transactionProvider:    transactionProvider,
+		relaysExtractor:        relaysExtractor,
+		ExternalEventPublisher: externalEventPublisher,
+		logger:                 logger.New("processSavedEventHandler"),
+		metrics:                metrics,
 	}
 }
 
 func (h *ProcessSavedEventHandler) Handle(ctx context.Context, cmd ProcessSavedEvent) (err error) {
 	defer h.metrics.StartApplicationCall("processSavedEvent").End(&err)
-
-	h.logger.
-		Trace().
-		WithField("eventID", cmd.id).
-		Message("processing saved event")
 
 	var event domain.Event
 	if err := h.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
@@ -66,8 +64,21 @@ func (h *ProcessSavedEventHandler) Handle(ctx context.Context, cmd ProcessSavedE
 		h.logger.Debug().WithField("event", event.String()).WithField("addresses", maybeRelayAddresses).Message("addresses")
 	}
 
-	// todo save relays
-	// todo publish event
+	if err := h.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
+		for _, maybeRelayAddress := range maybeRelayAddresses {
+			if err := adapters.Relays.Save(ctx, cmd.id, maybeRelayAddress); err != nil {
+				return errors.Wrap(err, "error saving a relay address")
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "transaction error")
+	}
+
+	if err := h.ExternalEventPublisher.PublishNewEventReceived(ctx, event); err != nil {
+		return errors.Wrap(err, "error publishing the external event")
+	}
 
 	return nil
 }

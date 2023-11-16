@@ -32,6 +32,7 @@ func BuildService(context.Context, config.Config) (Service, func(), error) {
 		adaptersSet,
 		migrationsAdaptersSet,
 		domainSet,
+		externalPubsubSet,
 	)
 	return Service{}, nil, nil
 }

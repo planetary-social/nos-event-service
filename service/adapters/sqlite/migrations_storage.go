@@ -3,9 +3,9 @@ package sqlite
 import (
 	"database/sql"
 	"encoding/json"
-	"github.com/planetary-social/nos-event-service/internal/migrations"
 
 	"github.com/boreq/errors"
+	"github.com/planetary-social/nos-event-service/internal/migrations"
 )
 
 type MigrationsStorage struct {

@@ -12,12 +12,18 @@ type TransactionProvider interface {
 
 type Adapters struct {
 	Events    EventRepository
+	Relays    RelayRepository
 	Publisher Publisher
 }
 
 type EventRepository interface {
 	Save(ctx context.Context, event domain.Event) error
 	Get(ctx context.Context, eventID domain.EventId) (domain.Event, error)
+}
+
+type RelayRepository interface {
+	Save(ctx context.Context, eventID domain.EventId, relayAddress domain.MaybeRelayAddress) error
+	List(ctx context.Context) ([]domain.MaybeRelayAddress, error)
 }
 
 type Publisher interface {

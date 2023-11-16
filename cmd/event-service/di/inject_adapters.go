@@ -37,6 +37,9 @@ var sqliteTestAdaptersSet = wire.NewSet(
 var sqliteTxAdaptersSet = wire.NewSet(
 	sqlite.NewEventRepository,
 	wire.Bind(new(app.EventRepository), new(*sqlite.EventRepository)),
+
+	sqlite.NewRelayRepository,
+	wire.Bind(new(app.RelayRepository), new(*sqlite.RelayRepository)),
 )
 
 var adaptersSet = wire.NewSet(

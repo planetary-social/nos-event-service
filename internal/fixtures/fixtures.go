@@ -154,6 +154,10 @@ func SomeBytesOfLen(l int) []byte {
 	return b
 }
 
+func SomeMaybeRelayAddress() domain.MaybeRelayAddress {
+	return domain.NewMaybeRelayAddress(SomeString())
+}
+
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 func randSeq(n int) string {

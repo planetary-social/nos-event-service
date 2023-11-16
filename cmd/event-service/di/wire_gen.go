@@ -9,13 +9,14 @@ package di
 import (
 	"context"
 	"database/sql"
-	"github.com/planetary-social/nos-event-service/internal/migrations"
 	"testing"
 
 	"github.com/google/wire"
 	"github.com/planetary-social/nos-event-service/internal/fixtures"
 	"github.com/planetary-social/nos-event-service/internal/logging"
+	"github.com/planetary-social/nos-event-service/internal/migrations"
 	"github.com/planetary-social/nos-event-service/service/adapters"
+	"github.com/planetary-social/nos-event-service/service/adapters/gcp"
 	"github.com/planetary-social/nos-event-service/service/adapters/memorypubsub"
 	"github.com/planetary-social/nos-event-service/service/adapters/prometheus"
 	"github.com/planetary-social/nos-event-service/service/adapters/sqlite"
@@ -51,7 +52,8 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	}
 	saveReceivedEventHandler := app.NewSaveReceivedEventHandler(genericTransactionProvider, logger, prometheusPrometheus)
 	relaysExtractor := domain.NewRelaysExtractor(logger)
-	processSavedEventHandler := app.NewProcessSavedEventHandler(genericTransactionProvider, relaysExtractor, logger, prometheusPrometheus)
+	noopPublisher := gcp.NewNoopPublisher()
+	processSavedEventHandler := app.NewProcessSavedEventHandler(genericTransactionProvider, relaysExtractor, noopPublisher, logger, prometheusPrometheus)
 	application := app.Application{
 		SaveReceivedEvent: saveReceivedEventHandler,
 		ProcessSavedEvent: processSavedEventHandler,
@@ -137,11 +139,13 @@ func buildTransactionSqliteAdapters(db *sql.DB, tx *sql.Tx, diBuildTransactionSq
 	if err != nil {
 		return app.Adapters{}, err
 	}
+	relayRepository := sqlite.NewRelayRepository(tx)
 	logger := diBuildTransactionSqliteAdaptersDependencies.Logger
 	pubSub := sqlite.NewPubSub(db, logger)
 	publisher := sqlite.NewPublisher(pubSub, tx)
 	appAdapters := app.Adapters{
 		Events:    eventRepository,
+		Relays:    relayRepository,
 		Publisher: publisher,
 	}
 	return appAdapters, nil
@@ -152,11 +156,13 @@ func buildTestTransactionSqliteAdapters(db *sql.DB, tx *sql.Tx, diBuildTransacti
 	if err != nil {
 		return sqlite.TestAdapters{}, err
 	}
+	relayRepository := sqlite.NewRelayRepository(tx)
 	logger := diBuildTransactionSqliteAdaptersDependencies.Logger
 	pubSub := sqlite.NewPubSub(db, logger)
 	publisher := sqlite.NewPublisher(pubSub, tx)
 	testAdapters := sqlite.TestAdapters{
 		EventRepository: eventRepository,
+		RelayRepository: relayRepository,
 		Publisher:       publisher,
 	}
 	return testAdapters, nil

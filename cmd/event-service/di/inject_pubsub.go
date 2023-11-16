@@ -2,6 +2,7 @@ package di
 
 import (
 	"github.com/google/wire"
+	"github.com/planetary-social/nos-event-service/service/adapters/gcp"
 	"github.com/planetary-social/nos-event-service/service/adapters/memorypubsub"
 	"github.com/planetary-social/nos-event-service/service/adapters/sqlite"
 	"github.com/planetary-social/nos-event-service/service/app"
@@ -25,4 +26,9 @@ var sqlitePubsubSet = wire.NewSet(
 var sqliteTxPubsubSet = wire.NewSet(
 	sqlite.NewPublisher,
 	wire.Bind(new(app.Publisher), new(*sqlite.Publisher)),
+)
+
+var externalPubsubSet = wire.NewSet(
+	gcp.NewNoopPublisher,
+	wire.Bind(new(app.ExternalEventPublisher), new(*gcp.NoopPublisher)), // todo
 )
