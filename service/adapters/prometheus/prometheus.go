@@ -20,8 +20,8 @@ const (
 	labelVcsTime     = "vcsTime"
 	labelGo          = "go"
 
-	labelConnectionAddress = "address"
-	labelConnectionState   = "state"
+	labelAddress         = "address"
+	labelConnectionState = "state"
 
 	labelResult                     = "result"
 	labelResultSuccess              = "success"
@@ -35,6 +35,7 @@ type Prometheus struct {
 	relayDownloadersGauge                   prometheus.Gauge
 	subscriptionQueueLengthGauge            *prometheus.GaugeVec
 	relayConnectionStateGauge               *prometheus.GaugeVec
+	receivedEventsCounter                   *prometheus.CounterVec
 
 	registry *prometheus.Registry
 
@@ -81,7 +82,14 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 			Name: "relay_connection_state_gauge",
 			Help: "State of relay connections.",
 		},
-		[]string{labelConnectionAddress, labelConnectionState},
+		[]string{labelAddress, labelConnectionState},
+	)
+	receivedEventsCounter := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "received_events_counter",
+			Help: "Number of received events.",
+		},
+		[]string{labelAddress},
 	)
 
 	reg := prometheus.NewRegistry()
@@ -92,6 +100,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		subscriptionQueueLengthGauge,
 		versionGague,
 		relayConnectionStateGauge,
+		receivedEventsCounter,
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		collectors.NewGoCollector(),
 	} {
@@ -120,6 +129,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		relayDownloadersGauge:                   relayDownloadersGauge,
 		subscriptionQueueLengthGauge:            subscriptionQueueLengthGauge,
 		relayConnectionStateGauge:               relayConnectionStateGauge,
+		receivedEventsCounter:                   receivedEventsCounter,
 
 		registry: reg,
 
@@ -144,11 +154,15 @@ func (p *Prometheus) ReportRelayConnectionsState(m map[domain.RelayAddress]relay
 	for address, state := range m {
 		p.relayConnectionStateGauge.With(
 			prometheus.Labels{
-				labelConnectionState:   state.String(),
-				labelConnectionAddress: address.String(),
+				labelConnectionState: state.String(),
+				labelAddress:         address.String(),
 			},
 		).Set(1)
 	}
+}
+
+func (p *Prometheus) ReportReceivedEvent(address domain.RelayAddress) {
+	p.receivedEventsCounter.With(prometheus.Labels{labelAddress: address.String()}).Inc()
 }
 
 func (p *Prometheus) Registry() *prometheus.Registry {

@@ -91,6 +91,7 @@ func buildTestTransactionSqliteAdapters(*sql.DB, *sql.Tx, buildTransactionSqlite
 }
 
 var downloaderSet = wire.NewSet(
+	app.NewRelayDownloaderFactory,
 	app.NewDownloader,
 
 	relays.NewBootstrapRelaySource,

@@ -19,6 +19,15 @@ const (
 	refreshKnownRelaysEvery = 1 * time.Minute
 )
 
+var (
+	globalEventTypesToDownload = []domain.EventKind{
+		domain.EventKindMetadata,
+		domain.EventKindRecommendedRelay,
+		domain.EventKindContacts,
+		domain.EventKindRelayListMetadata,
+	}
+)
+
 type ReceivedEventPublisher interface {
 	Publish(relay domain.RelayAddress, event domain.Event)
 }
@@ -41,29 +50,26 @@ type Downloader struct {
 
 	bootstrapRelaySource   BootstrapRelaySource
 	relaySource            RelaySource
-	relayConnections       RelayConnections
-	receivedEventPublisher ReceivedEventPublisher
 	logger                 logging.Logger
 	metrics                Metrics
+	relayDownloaderFactory *RelayDownloaderFactory
 }
 
 func NewDownloader(
 	bootstrapRelaySource BootstrapRelaySource,
 	relaySource RelaySource,
-	relayConnections RelayConnections,
-	receivedEventPublisher ReceivedEventPublisher,
 	logger logging.Logger,
 	metrics Metrics,
+	relayDownloaderFactory *RelayDownloaderFactory,
 ) *Downloader {
 	return &Downloader{
 		relayDownloaders: make(map[domain.RelayAddress]context.CancelFunc),
 
 		bootstrapRelaySource:   bootstrapRelaySource,
 		relaySource:            relaySource,
-		relayConnections:       relayConnections,
-		receivedEventPublisher: receivedEventPublisher,
 		logger:                 logger.New("downloader"),
 		metrics:                metrics,
+		relayDownloaderFactory: relayDownloaderFactory,
 	}
 }
 
@@ -133,12 +139,10 @@ func (d *Downloader) updateDownloaders(ctx context.Context) error {
 				WithField("address", relayAddress.String()).
 				Message("creating a downloader")
 
-			downloader := NewRelayDownloader(
-				d.receivedEventPublisher,
-				d.relayConnections,
-				d.logger,
-				relayAddress,
-			)
+			downloader, err := d.relayDownloaderFactory.CreateRelayDownloader(relayAddress)
+			if err != nil {
+				return errors.Wrap(err, "error creating a relay downloader")
+			}
 
 			ctx, cancel := context.WithCancel(ctx)
 			go downloader.Run(ctx)
@@ -176,13 +180,15 @@ type RelayDownloader struct {
 	receivedEventPublisher ReceivedEventPublisher
 	relayConnections       RelayConnections
 	logger                 logging.Logger
+	metrics                Metrics
 }
 
 func NewRelayDownloader(
+	address domain.RelayAddress,
 	receivedEventPublisher ReceivedEventPublisher,
 	relayConnections RelayConnections,
 	logger logging.Logger,
-	address domain.RelayAddress,
+	metrics Metrics,
 ) *RelayDownloader {
 	v := &RelayDownloader{
 		address: address,
@@ -190,6 +196,7 @@ func NewRelayDownloader(
 		receivedEventPublisher: receivedEventPublisher,
 		relayConnections:       relayConnections,
 		logger:                 logger.New(fmt.Sprintf("relayDownloader(%s)", address.String())),
+		metrics:                metrics,
 	}
 	return v
 }
@@ -197,7 +204,12 @@ func NewRelayDownloader(
 func (d *RelayDownloader) Run(ctx context.Context) {
 	//go d.storeMetricsLoop(ctx)
 
-	go d.downloadMessages(ctx, domain.NewFilter(nil, d.eventKindsToDownloadForEveryone(), nil, d.downloadSince()))
+	go d.downloadMessages(ctx, domain.NewFilter(
+		nil,
+		globalEventTypesToDownload,
+		nil,
+		d.downloadSince(),
+	))
 
 	//for {
 	//	if err := d.refreshRelays(ctx); err != nil {
@@ -213,15 +225,6 @@ func (d *RelayDownloader) Run(ctx context.Context) {
 	//		continue
 	//	}
 	//}
-}
-
-func (d *RelayDownloader) eventKindsToDownloadForEveryone() []domain.EventKind {
-	return []domain.EventKind{
-		domain.EventKindMetadata,
-		domain.EventKindRecommendedRelay,
-		domain.EventKindContacts,
-		domain.EventKindRelayListMetadata,
-	}
 }
 
 func (d *RelayDownloader) downloadSince() *time.Time {
@@ -322,6 +325,7 @@ func (d *RelayDownloader) downloadMessagesWithErr(ctx context.Context, filter do
 
 	for eventOrEOSE := range ch {
 		if !eventOrEOSE.EOSE() {
+			d.metrics.ReportReceivedEvent(d.address)
 			d.receivedEventPublisher.Publish(d.address, eventOrEOSE.Event())
 		}
 	}
@@ -369,4 +373,30 @@ func (m *DatabaseRelaySource) GetRelays(ctx context.Context) ([]domain.RelayAddr
 	}
 
 	return result, nil
+}
+
+type RelayDownloaderFactory struct {
+	relayConnections       RelayConnections
+	receivedEventPublisher ReceivedEventPublisher
+	logger                 logging.Logger
+	metrics                Metrics
+}
+
+func NewRelayDownloaderFactory(relayConnections RelayConnections, receivedEventPublisher ReceivedEventPublisher, logger logging.Logger, metrics Metrics) *RelayDownloaderFactory {
+	return &RelayDownloaderFactory{
+		relayConnections:       relayConnections,
+		receivedEventPublisher: receivedEventPublisher,
+		logger:                 logger.New("relayDownloaderFactory"),
+		metrics:                metrics,
+	}
+}
+
+func (r *RelayDownloaderFactory) CreateRelayDownloader(address domain.RelayAddress) (*RelayDownloader, error) {
+	return NewRelayDownloader(
+		address,
+		r.receivedEventPublisher,
+		r.relayConnections,
+		r.logger,
+		r.metrics,
+	), nil
 }
