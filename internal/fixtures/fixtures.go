@@ -19,6 +19,11 @@ func somePrivateKeyHex() string {
 	return nostr.GeneratePrivateKey()
 }
 
+func SomePublicKey() domain.PublicKey {
+	p, _ := SomeKeyPair()
+	return p
+}
+
 func SomeKeyPair() (publicKey domain.PublicKey, secretKeyHex string) {
 	hex := somePrivateKeyHex()
 

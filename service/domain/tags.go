@@ -29,6 +29,14 @@ func NewEventTag(tag []string) (EventTag, error) {
 	return EventTag{name: name, tag: tag}, nil
 }
 
+func MustNewEventTag(tag []string) EventTag {
+	v, err := NewEventTag(tag)
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
 func (e EventTag) Name() EventTagName {
 	return e.name
 }
