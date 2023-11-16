@@ -52,8 +52,16 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	}
 	saveReceivedEventHandler := app.NewSaveReceivedEventHandler(genericTransactionProvider, logger, prometheusPrometheus)
 	relaysExtractor := domain.NewRelaysExtractor(logger)
+	watermillAdapter := logging.NewWatermillAdapter(logger)
+	publisher, err := gcp.NewWatermillPublisher(configConfig, watermillAdapter)
+	if err != nil {
+		cleanup()
+		return Service{}, nil, err
+	}
+	gcpPublisher := gcp.NewPublisher(publisher)
 	noopPublisher := gcp.NewNoopPublisher()
-	processSavedEventHandler := app.NewProcessSavedEventHandler(genericTransactionProvider, relaysExtractor, noopPublisher, logger, prometheusPrometheus)
+	externalEventPublisher := selectExternalPublisher(configConfig, gcpPublisher, noopPublisher)
+	processSavedEventHandler := app.NewProcessSavedEventHandler(genericTransactionProvider, relaysExtractor, externalEventPublisher, logger, prometheusPrometheus)
 	application := app.Application{
 		SaveReceivedEvent: saveReceivedEventHandler,
 		ProcessSavedEvent: processSavedEventHandler,
@@ -172,7 +180,7 @@ func buildTestTransactionSqliteAdapters(db *sql.DB, tx *sql.Tx, diBuildTransacti
 // wire.go:
 
 func newTestAdaptersConfig(tb testing.TB) (config.Config, error) {
-	return config.NewConfig(fixtures.SomeString(), config.EnvironmentDevelopment, logging.LevelDebug, false, fixtures.SomeString(), nil, fixtures.SomeFile(tb))
+	return config.NewConfig(fixtures.SomeString(), config.EnvironmentDevelopment, logging.LevelDebug, fixtures.SomeString(), nil, fixtures.SomeFile(tb))
 }
 
 type buildTransactionSqliteAdaptersDependencies struct {

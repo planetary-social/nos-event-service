@@ -22,7 +22,6 @@ type Config struct {
 	environment Environment
 	logLevel    logging.Level
 
-	googlePubSubEnabled         bool
 	googlePubSubProjectID       string
 	googlePubSubCredentialsJSON []byte
 
@@ -33,7 +32,6 @@ func NewConfig(
 	listenAddress string,
 	environment Environment,
 	logLevel logging.Level,
-	googlePubSubEnabled bool,
 	googlePubSubProjectID string,
 	googlePubSubCredentialsJSON []byte,
 	databasePath string,
@@ -42,7 +40,6 @@ func NewConfig(
 		listenAddress:               listenAddress,
 		environment:                 environment,
 		logLevel:                    logLevel,
-		googlePubSubEnabled:         googlePubSubEnabled,
 		googlePubSubProjectID:       googlePubSubProjectID,
 		googlePubSubCredentialsJSON: googlePubSubCredentialsJSON,
 		databasePath:                databasePath,
@@ -66,10 +63,6 @@ func (c *Config) Environment() Environment {
 
 func (c *Config) LogLevel() logging.Level {
 	return c.logLevel
-}
-
-func (c *Config) GooglePubSubEnabled() bool {
-	return c.googlePubSubEnabled
 }
 
 func (c *Config) GooglePubSubProjectID() string {
@@ -102,7 +95,7 @@ func (c *Config) validate() error {
 		return fmt.Errorf("unknown environment '%+v'", c.environment)
 	}
 
-	if c.googlePubSubEnabled {
+	if c.environment != EnvironmentDevelopment {
 		if c.googlePubSubProjectID == "" {
 			return errors.New("missing google pub sub project id")
 		}

@@ -17,7 +17,6 @@ const (
 	envListenAddress                   = "LISTEN_ADDRESS"
 	envEnvironment                     = "ENVIRONMENT"
 	envLogLevel                        = "LOG_LEVEL"
-	envGooglePubsubEnabled             = "GOOGLE_PUBSUB_ENABLED"
 	envGooglePubsubProjectID           = "GOOGLE_PUBSUB_PROJECT_ID"
 	envGooglePubsubCredentialsJSONPath = "GOOGLE_PUBSUB_CREDENTIALS_JSON_PATH"
 	envDatabasePath                    = "DATABASE_PATH"
@@ -56,16 +55,10 @@ func (c *EnvironmentConfigLoader) Load() (config.Config, error) {
 		googlePubSubCredentialsJSON = b
 	}
 
-	googlePubSubEnabled, err := c.getenvbool(envGooglePubsubEnabled)
-	if err != nil {
-		return config.Config{}, errors.Wrapf(err, "error loading variable '%s'", envGooglePubsubEnabled)
-	}
-
 	return config.NewConfig(
 		c.getenv(envListenAddress),
 		environment,
 		logLevel,
-		googlePubSubEnabled,
 		c.getenv(envGooglePubsubProjectID),
 		googlePubSubCredentialsJSON,
 		c.getenv(envDatabasePath),

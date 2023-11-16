@@ -6,6 +6,7 @@ import (
 	"github.com/planetary-social/nos-event-service/service/adapters/memorypubsub"
 	"github.com/planetary-social/nos-event-service/service/adapters/sqlite"
 	"github.com/planetary-social/nos-event-service/service/app"
+	"github.com/planetary-social/nos-event-service/service/config"
 	"github.com/planetary-social/nos-event-service/service/ports/sqlitepubsub"
 )
 
@@ -30,5 +31,14 @@ var sqliteTxPubsubSet = wire.NewSet(
 
 var externalPubsubSet = wire.NewSet(
 	gcp.NewNoopPublisher,
-	wire.Bind(new(app.ExternalEventPublisher), new(*gcp.NoopPublisher)), // todo
+	gcp.NewPublisher,
+	gcp.NewWatermillPublisher,
+	selectExternalPublisher,
 )
+
+func selectExternalPublisher(conf config.Config, real *gcp.Publisher, noop *gcp.NoopPublisher) app.ExternalEventPublisher {
+	if conf.Environment() == config.EnvironmentDevelopment {
+		return noop
+	}
+	return real
+}
