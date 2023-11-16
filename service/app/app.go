@@ -62,6 +62,7 @@ type ReceivedEventSubscriber interface {
 
 type Metrics interface {
 	StartApplicationCall(handlerName string) ApplicationCall
+	ReportNumberOfRelayDownloaders(n int)
 }
 
 type ApplicationCall interface {

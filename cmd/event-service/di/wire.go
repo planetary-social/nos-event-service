@@ -96,8 +96,8 @@ var downloaderSet = wire.NewSet(
 	relays.NewBootstrapRelaySource,
 	wire.Bind(new(app.BootstrapRelaySource), new(*relays.BootstrapRelaySource)),
 
-	app.NewMockRelaySource,
-	wire.Bind(new(app.RelaySource), new(*app.MockRelaySource)),
+	app.NewDatabaseRelaySource,
+	wire.Bind(new(app.RelaySource), new(*app.DatabaseRelaySource)),
 
 	relays.NewRelayConnections,
 	wire.Bind(new(app.RelayConnections), new(*relays.RelayConnections)),

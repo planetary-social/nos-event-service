@@ -2,7 +2,6 @@ package prometheus
 
 import (
 	"runtime/debug"
-	"strconv"
 	"time"
 
 	"github.com/boreq/errors"
@@ -15,35 +14,31 @@ import (
 )
 
 const (
-	labelHandlerName          = "handlerName"
-	labelRelayDownloaderState = "state"
-	labelTopic                = "topic"
-	labelVcsRevision          = "vcsRevision"
-	labelVcsTime              = "vcsTime"
-	labelGo                   = "go"
+	labelHandlerName = "handlerName"
+	labelTopic       = "topic"
+	labelVcsRevision = "vcsRevision"
+	labelVcsTime     = "vcsTime"
+	labelGo          = "go"
+
+	labelConnectionAddress = "address"
+	labelConnectionState   = "state"
 
 	labelResult                     = "result"
 	labelResultSuccess              = "success"
 	labelResultError                = "error"
 	labelResultInvalidPointerPassed = "invalidPointerPassed"
-
-	labelStatusCode = "statusCode"
 )
 
 type Prometheus struct {
 	applicationHandlerCallsCounter          *prometheus.CounterVec
 	applicationHandlerCallDurationHistogram *prometheus.HistogramVec
-	relayDownloaderStateGauge               *prometheus.GaugeVec
+	relayDownloadersGauge                   prometheus.Gauge
 	subscriptionQueueLengthGauge            *prometheus.GaugeVec
-	apnsCallsCounter                        *prometheus.CounterVec
+	relayConnectionStateGauge               *prometheus.GaugeVec
 
 	registry *prometheus.Registry
 
 	logger logging.Logger
-}
-
-func (p *Prometheus) ReportRelayConnectionsState(m map[domain.RelayAddress]relays.RelayConnectionState) {
-	// todo
 }
 
 func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
@@ -61,12 +56,11 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		},
 		[]string{labelHandlerName, labelResult},
 	)
-	relayDownloaderStateGauge := prometheus.NewGaugeVec(
+	relayDownloadersGauge := prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "relay_downloader_count",
+			Name: "relay_downloader_gauge",
 			Help: "Number of running relay downloaders.",
 		},
-		[]string{labelRelayDownloaderState},
 	)
 	subscriptionQueueLengthGauge := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -82,22 +76,22 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		},
 		[]string{labelVcsRevision, labelVcsTime, labelGo},
 	)
-	apnsCallsCounter := prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "apns_calls_total",
-			Help: "Total number of calls to APNs.",
+	relayConnectionStateGauge := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "relay_connection_state_gauge",
+			Help: "State of relay connections.",
 		},
-		[]string{labelStatusCode, labelResult},
+		[]string{labelConnectionAddress, labelConnectionState},
 	)
 
 	reg := prometheus.NewRegistry()
 	for _, v := range []prometheus.Collector{
 		applicationHandlerCallsCounter,
 		applicationHandlerCallDurationHistogram,
-		relayDownloaderStateGauge,
+		relayDownloadersGauge,
 		subscriptionQueueLengthGauge,
 		versionGague,
-		apnsCallsCounter,
+		relayConnectionStateGauge,
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		collectors.NewGoCollector(),
 	} {
@@ -123,9 +117,9 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 	return &Prometheus{
 		applicationHandlerCallsCounter:          applicationHandlerCallsCounter,
 		applicationHandlerCallDurationHistogram: applicationHandlerCallDurationHistogram,
-		relayDownloaderStateGauge:               relayDownloaderStateGauge,
+		relayDownloadersGauge:                   relayDownloadersGauge,
 		subscriptionQueueLengthGauge:            subscriptionQueueLengthGauge,
-		apnsCallsCounter:                        apnsCallsCounter,
+		relayConnectionStateGauge:               relayConnectionStateGauge,
 
 		registry: reg,
 
@@ -141,16 +135,20 @@ func (p *Prometheus) ReportSubscriptionQueueLength(topic string, n int) {
 	p.subscriptionQueueLengthGauge.With(prometheus.Labels{labelTopic: topic}).Set(float64(n))
 }
 
-func (p *Prometheus) ReportCallToAPNS(statusCode int, err error) {
-	labels := prometheus.Labels{
-		labelStatusCode: strconv.Itoa(statusCode),
+func (p *Prometheus) ReportNumberOfRelayDownloaders(n int) {
+	p.relayDownloadersGauge.Set(float64(n))
+}
+
+func (p *Prometheus) ReportRelayConnectionsState(m map[domain.RelayAddress]relays.RelayConnectionState) {
+	p.relayConnectionStateGauge.Reset()
+	for address, state := range m {
+		p.relayConnectionStateGauge.With(
+			prometheus.Labels{
+				labelConnectionState:   state.String(),
+				labelConnectionAddress: address.String(),
+			},
+		).Set(1)
 	}
-	if err == nil {
-		labels[labelResult] = labelResultSuccess
-	} else {
-		labels[labelResult] = labelResultError
-	}
-	p.apnsCallsCounter.With(labels).Inc()
 }
 
 func (p *Prometheus) Registry() *prometheus.Registry {

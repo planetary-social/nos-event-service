@@ -14,10 +14,9 @@ import (
 )
 
 const (
-	howFarIntoThePastToLook               = 24 * time.Hour
-	storeMetricsEvery                     = 30 * time.Second
-	refreshDownloaderPublicKeysEvery      = 1 * time.Minute
-	refreshPublicKeyDownloaderRelaysEvery = 1 * time.Minute
+	downloadEventsFromLast  = 24 * time.Hour
+	storeMetricsEvery       = 30 * time.Second
+	refreshKnownRelaysEvery = 1 * time.Minute
 )
 
 type ReceivedEventPublisher interface {
@@ -45,8 +44,7 @@ type Downloader struct {
 	relayConnections       RelayConnections
 	receivedEventPublisher ReceivedEventPublisher
 	logger                 logging.Logger
-	//metrics                Metrics
-	//relayEventDownloader   RelayEventDownloader
+	metrics                Metrics
 }
 
 func NewDownloader(
@@ -55,6 +53,7 @@ func NewDownloader(
 	relayConnections RelayConnections,
 	receivedEventPublisher ReceivedEventPublisher,
 	logger logging.Logger,
+	metrics Metrics,
 ) *Downloader {
 	return &Downloader{
 		relayDownloaders: make(map[domain.RelayAddress]context.CancelFunc),
@@ -64,45 +63,47 @@ func NewDownloader(
 		relayConnections:       relayConnections,
 		receivedEventPublisher: receivedEventPublisher,
 		logger:                 logger.New("downloader"),
+		metrics:                metrics,
 	}
 }
 
 func (d *Downloader) Run(ctx context.Context) error {
-	//go d.storeMetricsLoop(ctx)
+	go d.storeMetricsLoop(ctx)
 
 	for {
 		if err := d.updateDownloaders(ctx); err != nil {
-			d.logger.Error().
+			d.logger.
+				Error().
 				WithError(err).
-				Message("error updating relays")
+				Message("error updating downloaders")
 		}
 
 		select {
-		case <-time.After(refreshDownloaderPublicKeysEvery):
+		case <-time.After(refreshKnownRelaysEvery):
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
 }
 
-//func (d *Downloader) storeMetricsLoop(ctx context.Context) {
-//	for {
-//		d.storeMetrics()
-//
-//		select {
-//		case <-time.After(storeMetricsEvery):
-//		case <-ctx.Done():
-//			return
-//		}
-//	}
-//}
-//
-//func (d *Downloader) storeMetrics() {
-//	d.publicKeyDownloadersLock.Lock()
-//	defer d.publicKeyDownloadersLock.Unlock()
-//
-//	d.metrics.ReportNumberOfPublicKeyDownloaders(len(d.publicKeyDownloaders))
-//}
+func (d *Downloader) storeMetricsLoop(ctx context.Context) {
+	for {
+		d.storeMetrics()
+
+		select {
+		case <-time.After(storeMetricsEvery):
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (d *Downloader) storeMetrics() {
+	d.relayDownloadersLock.Lock()
+	defer d.relayDownloadersLock.Unlock()
+
+	d.metrics.ReportNumberOfRelayDownloaders(len(d.relayDownloaders))
+}
 
 func (d *Downloader) updateDownloaders(ctx context.Context) error {
 	relays, err := d.getRelays(ctx)
@@ -119,6 +120,7 @@ func (d *Downloader) updateDownloaders(ctx context.Context) error {
 				Trace().
 				WithField("address", relayAddress.String()).
 				Message("stopping a downloader")
+
 			delete(d.relayDownloaders, relayAddress)
 			cancelFn()
 		}
@@ -126,7 +128,8 @@ func (d *Downloader) updateDownloaders(ctx context.Context) error {
 
 	for _, relayAddress := range relays.List() {
 		if _, ok := d.relayDownloaders[relayAddress]; !ok {
-			d.logger.Trace().
+			d.logger.
+				Trace().
 				WithField("address", relayAddress.String()).
 				Message("creating a downloader")
 
@@ -155,11 +158,11 @@ func (d *Downloader) getRelays(ctx context.Context) (*internal.Set[domain.RelayA
 	}
 	result.PutMany(bootstrapRelays)
 
-	relays, err := d.relaySource.GetRelays(ctx)
+	databaseRelays, err := d.relaySource.GetRelays(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "error getting relays")
 	}
-	result.PutMany(relays)
+	result.PutMany(databaseRelays)
 
 	return result, nil
 }
@@ -222,7 +225,7 @@ func (d *RelayDownloader) eventKindsToDownloadForEveryone() []domain.EventKind {
 }
 
 func (d *RelayDownloader) downloadSince() *time.Time {
-	return internal.Pointer(time.Now().Add(-howFarIntoThePastToLook))
+	return internal.Pointer(time.Now().Add(-downloadEventsFromLast))
 
 }
 
@@ -324,4 +327,46 @@ func (d *RelayDownloader) downloadMessagesWithErr(ctx context.Context, filter do
 	}
 
 	return nil
+}
+
+type DatabaseRelaySource struct {
+	transactionProvider TransactionProvider
+	logger              logging.Logger
+}
+
+func NewDatabaseRelaySource(transactionProvider TransactionProvider, logger logging.Logger) *DatabaseRelaySource {
+	return &DatabaseRelaySource{
+		transactionProvider: transactionProvider,
+		logger:              logger.New("databaseRelaySource"),
+	}
+}
+
+func (m *DatabaseRelaySource) GetRelays(ctx context.Context) ([]domain.RelayAddress, error) {
+	var maybeResult []domain.MaybeRelayAddress
+	if err := m.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
+		tmp, err := adapters.Relays.List(ctx)
+		if err != nil {
+			return errors.Wrap(err, "error listing relays")
+		}
+		maybeResult = tmp
+		return nil
+	}); err != nil {
+		return nil, errors.Wrap(err, "transaction error")
+	}
+
+	var result []domain.RelayAddress
+	for _, maybe := range maybeResult {
+		address, err := domain.NewRelayAddressFromMaybeAddress(maybe)
+		if err != nil {
+			m.logger.
+				Debug().
+				WithError(err).
+				WithField("address", maybe.String()).
+				Message("address is invalid")
+			continue
+		}
+		result = append(result, address)
+	}
+
+	return result, nil
 }

@@ -60,10 +60,10 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	}
 	server := http.NewServer(configConfig, logger, application, prometheusPrometheus)
 	bootstrapRelaySource := relays.NewBootstrapRelaySource()
-	mockRelaySource := app.NewMockRelaySource()
+	databaseRelaySource := app.NewDatabaseRelaySource(genericTransactionProvider, logger)
 	relayConnections := relays.NewRelayConnections(contextContext, logger, prometheusPrometheus)
 	receivedEventPubSub := memorypubsub.NewReceivedEventPubSub()
-	downloader := app.NewDownloader(bootstrapRelaySource, mockRelaySource, relayConnections, receivedEventPubSub, logger)
+	downloader := app.NewDownloader(bootstrapRelaySource, databaseRelaySource, relayConnections, receivedEventPubSub, logger, prometheusPrometheus)
 	receivedEventSubscriber := memorypubsub2.NewReceivedEventSubscriber(receivedEventPubSub, saveReceivedEventHandler, logger)
 	pubSub := sqlite.NewPubSub(db, logger)
 	subscriber := sqlite.NewSubscriber(pubSub, db)
@@ -178,6 +178,6 @@ type buildTransactionSqliteAdaptersDependencies struct {
 	Logger logging.Logger
 }
 
-var downloaderSet = wire.NewSet(app.NewDownloader, relays.NewBootstrapRelaySource, wire.Bind(new(app.BootstrapRelaySource), new(*relays.BootstrapRelaySource)), app.NewMockRelaySource, wire.Bind(new(app.RelaySource), new(*app.MockRelaySource)), relays.NewRelayConnections, wire.Bind(new(app.RelayConnections), new(*relays.RelayConnections)))
+var downloaderSet = wire.NewSet(app.NewDownloader, relays.NewBootstrapRelaySource, wire.Bind(new(app.BootstrapRelaySource), new(*relays.BootstrapRelaySource)), app.NewDatabaseRelaySource, wire.Bind(new(app.RelaySource), new(*app.DatabaseRelaySource)), relays.NewRelayConnections, wire.Bind(new(app.RelayConnections), new(*relays.RelayConnections)))
 
 var domainSet = wire.NewSet(domain.NewRelaysExtractor, wire.Bind(new(app.RelaysExtractor), new(*domain.RelaysExtractor)))

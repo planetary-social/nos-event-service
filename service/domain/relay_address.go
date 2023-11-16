@@ -25,6 +25,10 @@ func MustNewRelayAddress(s string) RelayAddress {
 	return v
 }
 
+func NewRelayAddressFromMaybeAddress(maybe MaybeRelayAddress) (RelayAddress, error) {
+	return NewRelayAddress(maybe.String())
+}
+
 func (r RelayAddress) String() string {
 	return r.s
 }
