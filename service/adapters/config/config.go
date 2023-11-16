@@ -100,16 +100,3 @@ func (c *EnvironmentConfigLoader) loadLogLevel() (logging.Level, error) {
 func (c *EnvironmentConfigLoader) getenv(key string) string {
 	return os.Getenv(fmt.Sprintf("%s_%s", envPrefix, key))
 }
-
-func (c *EnvironmentConfigLoader) getenvbool(key string) (bool, error) {
-	switch v := strings.ToUpper(c.getenv(key)); v {
-	case "":
-		return false, nil
-	case "TRUE":
-		return true, nil
-	case "FALSE":
-		return false, nil
-	default:
-		return false, fmt.Errorf("unknow value '%s'", v)
-	}
-}
