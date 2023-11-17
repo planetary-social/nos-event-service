@@ -24,9 +24,7 @@ Optional, defaults to `:8008` if empty.
 ### `EVENTS_ENVIRONMENT`
 
 Execution environment. Setting environment to `DEVELOPMENT`:
-- replaces a Twitter API adapter with a fake adapter
-  - it doesn't actually post to Twitter
-  - it returns hardcoded fake Twitter account details (due to weird rate-limiting errors)
+- turns off posting events to Google PubSub
 
 Optional, can be set to `PRODUCTION` or `DEVELOPMENT`. Defaults to `PRODUCTION`.
 
@@ -42,6 +40,16 @@ Optional, can be set to `TRACE`, `DEBUG`, `ERROR` or `DISABLED`. Defaults to
 Full path to the database file.
 
 Required, e.g. `/some/directory/database.sqlite`.
+
+### `EVENTS_GOOGLE_PUBSUB_PROJECT_ID`
+
+Project ID used for Google Cloud Pubsub. Required when `EVENTS_ENVIRONMENT` is
+set to `PRODUCTION`.
+
+### `EVENTS_GOOGLE_PUBSUB_CREDENTIALS_JSON_PATH`
+
+Path to your Google Cloud credentials JSON file. Required when
+`EVENTS_ENVIRONMENT` is set to `PRODUCTION`.
 
 ## Metrics
 
