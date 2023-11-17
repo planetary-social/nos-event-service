@@ -18,6 +18,14 @@ func NewSet[T comparable](values []T) *Set[T] {
 	return v
 }
 
+func NewSetVariadic[T comparable](values ...T) *Set[T] {
+	v := NewEmptySet[T]()
+	for _, value := range values {
+		v.Put(value)
+	}
+	return v
+}
+
 func (s *Set[T]) Contains(v T) bool {
 	_, ok := s.values[v]
 	return ok
@@ -51,4 +59,24 @@ func (s *Set[T]) List() []T {
 
 func (s *Set[T]) Len() int {
 	return len(s.values)
+}
+
+func (s *Set[T]) Equal(b *Set[T]) bool {
+	if s.Len() != b.Len() {
+		return false
+	}
+
+	for v := range s.values {
+		if !b.Contains(v) {
+			return false
+		}
+	}
+
+	for v := range b.values {
+		if !s.Contains(v) {
+			return false
+		}
+	}
+
+	return true
 }

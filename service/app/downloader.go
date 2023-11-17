@@ -180,8 +180,9 @@ func (d *Downloader) getRelays(ctx context.Context) (*internal.Set[domain.RelayA
 type RelayDownloader struct {
 	address domain.RelayAddress
 
-	downloaders     map[domain.PublicKey]context.CancelFunc
-	downloadersLock sync.Mutex
+	publicKeySubscriptionCancelFunc context.CancelFunc
+	publicKeySubscriptionPublicKeys *internal.Set[domain.PublicKey]
+	publicKeySubscriptionLock       sync.Mutex
 
 	receivedEventPublisher ReceivedEventPublisher
 	relayConnections       RelayConnections
@@ -201,7 +202,7 @@ func NewRelayDownloader(
 	v := &RelayDownloader{
 		address: address,
 
-		downloaders: make(map[domain.PublicKey]context.CancelFunc),
+		publicKeySubscriptionPublicKeys: internal.NewEmptySet[domain.PublicKey](),
 
 		receivedEventPublisher: receivedEventPublisher,
 		relayConnections:       relayConnections,
@@ -255,37 +256,26 @@ func (d *RelayDownloader) refreshPublicKeys(ctx context.Context) error {
 
 	publicKeysSet := internal.NewSet(publicKeys)
 
-	d.downloadersLock.Lock()
-	defer d.downloadersLock.Unlock()
+	d.publicKeySubscriptionLock.Lock()
+	defer d.publicKeySubscriptionLock.Unlock()
 
-	for publicKey, cancelFn := range d.downloaders {
-		if !publicKeysSet.Contains(publicKey) {
-			d.logger.
-				Trace().
-				WithField("publicKey", publicKey.Hex()).
-				Message("stopping a downloader")
-			delete(d.downloaders, publicKey)
-			cancelFn()
-		}
+	if publicKeysSet.Equal(d.publicKeySubscriptionPublicKeys) {
+		return nil
 	}
 
-	for _, publicKey := range publicKeysSet.List() {
-		if _, ok := d.downloaders[publicKey]; !ok {
-			d.logger.
-				Trace().
-				WithField("publicKey", publicKey.Hex()).
-				Message("creating a downloader")
-
-			ctx, cancel := context.WithCancel(ctx)
-			go d.downloadMessages(ctx, domain.NewFilter(
-				nil,
-				nil,
-				[]domain.PublicKey{publicKey},
-				d.downloadSince(),
-			))
-			d.downloaders[publicKey] = cancel
-		}
+	if d.publicKeySubscriptionCancelFunc != nil {
+		d.publicKeySubscriptionCancelFunc()
 	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	go d.downloadMessages(ctx, domain.NewFilter(
+		nil,
+		nil,
+		publicKeysSet.List(),
+		d.downloadSince(),
+	))
+	d.publicKeySubscriptionPublicKeys = publicKeysSet
+	d.publicKeySubscriptionCancelFunc = cancel
 
 	return nil
 }

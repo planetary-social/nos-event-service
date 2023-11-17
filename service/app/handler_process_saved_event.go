@@ -88,11 +88,6 @@ func (h *ProcessSavedEventHandler) saveRelaysAndContacts(ctx context.Context, ev
 		return errors.Wrap(err, "error extracting contacts")
 	}
 
-	// todo remove logging
-	if len(maybeRelayAddresses) == 0 && !(event.Kind() == domain.EventKindContacts && event.Content() == "") {
-		h.logger.Debug().WithField("event", event.String()).WithField("addresses", maybeRelayAddresses).Message("addresses")
-	}
-
 	if err := h.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
 		for _, maybeRelayAddress := range maybeRelayAddresses {
 			if err := adapters.Relays.Save(ctx, event.Id(), maybeRelayAddress); err != nil {

@@ -232,7 +232,11 @@ func (a *ApplicationCall) End(err *error) {
 	if err == nil {
 		l.Error().Message("application call with an invalid error pointer")
 	} else {
-		l.Debug().WithError(*err).Message("application call")
+		if *err == nil {
+			l.Trace().WithError(*err).Message("application call")
+		} else {
+			l.Debug().WithError(*err).Message("application call")
+		}
 	}
 
 	labels := a.getLabels(err)

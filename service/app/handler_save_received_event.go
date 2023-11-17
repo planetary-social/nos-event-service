@@ -64,7 +64,7 @@ func (h *SaveReceivedEventHandler) Handle(ctx context.Context, cmd SaveReceivedE
 		if !shouldBeDownloaded {
 			h.logger.
 				Debug().
-				WithField("event", cmd.event.Raw()).
+				WithField("event", cmd.event.String()).
 				WithField("address", cmd.relay.String()).
 				Message("event shouldn't have been downloaded, relay may be misbehaving")
 			return nil
