@@ -11,7 +11,24 @@ import (
 
 type Metrics interface {
 	ReportRelayConnectionsState(m map[domain.RelayAddress]RelayConnectionState)
+	ReportNumberOfSubscriptions(address domain.RelayAddress, n int)
+	ReportMessageReceived(address domain.RelayAddress, messageType MessageType, err *error)
 }
+
+type MessageType struct {
+	s string
+}
+
+func (t MessageType) String() string {
+	return t.s
+}
+
+var (
+	MessageTypeNotice  = MessageType{"notice"}
+	MessageTypeEOSE    = MessageType{"eose"}
+	MessageTypeEvent   = MessageType{"event"}
+	MessageTypeUnknown = MessageType{"unknown"}
+)
 
 const (
 	storeMetricsEvery = 30 * time.Second
@@ -75,7 +92,7 @@ func (r *RelayConnections) getConnection(relayAddress domain.RelayAddress) *Rela
 		return connection
 	}
 
-	connection := NewRelayConnection(relayAddress, r.logger)
+	connection := NewRelayConnection(relayAddress, r.logger, r.metrics)
 	go connection.Run(r.longCtx)
 
 	r.connections[relayAddress] = connection

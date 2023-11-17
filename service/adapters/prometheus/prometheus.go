@@ -23,6 +23,8 @@ const (
 	labelAddress         = "address"
 	labelConnectionState = "state"
 
+	labelMessageType = "messageType"
+
 	labelResult                     = "result"
 	labelResultSuccess              = "success"
 	labelResultError                = "error"
@@ -36,6 +38,8 @@ type Prometheus struct {
 	subscriptionQueueLengthGauge            *prometheus.GaugeVec
 	relayConnectionStateGauge               *prometheus.GaugeVec
 	receivedEventsCounter                   *prometheus.CounterVec
+	relayConnectionSubscriptionsGauge       *prometheus.GaugeVec
+	relayConnectionReceivedMessagesCounter  *prometheus.CounterVec
 
 	registry *prometheus.Registry
 
@@ -91,6 +95,20 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		},
 		[]string{labelAddress},
 	)
+	relayConnectionSubscriptionsGauge := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "relay_connection_subscriptions_gauge",
+			Help: "Number of relay connection subscriptions.",
+		},
+		[]string{labelAddress},
+	)
+	relayConnectionReceivedMessagesCounter := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "relay_connection_received_messages_counter",
+			Help: "Number of received messages and their processing result.",
+		},
+		[]string{labelAddress, labelMessageType, labelResult},
+	)
 
 	reg := prometheus.NewRegistry()
 	for _, v := range []prometheus.Collector{
@@ -101,6 +119,8 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		versionGague,
 		relayConnectionStateGauge,
 		receivedEventsCounter,
+		relayConnectionSubscriptionsGauge,
+		relayConnectionReceivedMessagesCounter,
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		collectors.NewGoCollector(),
 	} {
@@ -130,6 +150,8 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		subscriptionQueueLengthGauge:            subscriptionQueueLengthGauge,
 		relayConnectionStateGauge:               relayConnectionStateGauge,
 		receivedEventsCounter:                   receivedEventsCounter,
+		relayConnectionSubscriptionsGauge:       relayConnectionSubscriptionsGauge,
+		relayConnectionReceivedMessagesCounter:  relayConnectionReceivedMessagesCounter,
 
 		registry: reg,
 
@@ -163,6 +185,21 @@ func (p *Prometheus) ReportReceivedEvent(address domain.RelayAddress) {
 
 func (p *Prometheus) ReportQueueLength(topic string, n int) {
 	p.subscriptionQueueLengthGauge.With(prometheus.Labels{labelTopic: topic}).Set(float64(n))
+}
+
+func (p *Prometheus) ReportNumberOfSubscriptions(address domain.RelayAddress, n int) {
+	p.relayConnectionSubscriptionsGauge.With(prometheus.Labels{
+		labelAddress: address.String(),
+	}).Set(float64(n))
+}
+
+func (p *Prometheus) ReportMessageReceived(address domain.RelayAddress, messageType relays.MessageType, err *error) {
+	labels := prometheus.Labels{
+		labelAddress:     address.String(),
+		labelMessageType: messageType.String(),
+	}
+	setResultLabel(labels, err)
+	p.relayConnectionReceivedMessagesCounter.With(labels).Inc()
 }
 
 func (p *Prometheus) Registry() *prometheus.Registry {
@@ -208,6 +245,12 @@ func (a *ApplicationCall) getLabels(err *error) prometheus.Labels {
 		labelHandlerName: a.handlerName,
 	}
 
+	setResultLabel(labels, err)
+
+	return labels
+}
+
+func setResultLabel(labels prometheus.Labels, err *error) {
 	if err == nil {
 		labels[labelResult] = labelResultInvalidPointerPassed
 	} else {
@@ -217,6 +260,4 @@ func (a *ApplicationCall) getLabels(err *error) prometheus.Labels {
 			labels[labelResult] = labelResultError
 		}
 	}
-
-	return labels
 }
