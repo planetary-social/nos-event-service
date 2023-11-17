@@ -24,6 +24,10 @@ type BackoffManager interface {
 	GetNoMessagesBackoff(tick int) time.Duration
 }
 
+type PubsubTransactionProvider interface {
+	Transact(context.Context, func(context.Context, *sql.Tx) error) error
+}
+
 type Message struct {
 	uuid    string
 	payload []byte
@@ -99,16 +103,19 @@ var (
 )
 
 type PubSub struct {
-	backoffManager BackoffManager
-	db             *sql.DB
-	logger         logging.Logger
+	backoffManager      BackoffManager
+	transactionProvider PubsubTransactionProvider
+	logger              logging.Logger
 }
 
-func NewPubSub(db *sql.DB, logger logging.Logger) *PubSub {
+func NewPubSub(
+	transactionProvider PubsubTransactionProvider,
+	logger logging.Logger,
+) *PubSub {
 	return &PubSub{
-		backoffManager: NewDefaultBackoffManager(),
-		db:             db,
-		logger:         logger,
+		backoffManager:      NewDefaultBackoffManager(),
+		transactionProvider: transactionProvider,
+		logger:              logger,
 	}
 }
 
@@ -125,25 +132,14 @@ func (p *PubSub) InitializingQueries() []string {
 	}
 }
 
-func (p *PubSub) Publish(topic string, msg Message) error {
-	return p.publish(p.db, topic, msg)
-}
-
-func (p *PubSub) PublishTx(tx *sql.Tx, topic string, msg Message) error {
-	return p.publish(tx, topic, msg)
-}
-
-func (p *PubSub) publish(e executor, topic string, msg Message) error {
-	_, err := e.Exec(
-		"INSERT INTO pubsub VALUES (?, ?, ?, ?, ?, ?)",
-		topic,
-		msg.uuid,
-		msg.payload,
-		time.Now().Unix(),
-		0,
-		nil,
-	)
-	return err
+func (p *PubSub) Publish(ctx context.Context, topic string, msg Message) error {
+	if err := p.transactionProvider.Transact(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		txPubSub := NewTxPubSub(tx, p.logger)
+		return txPubSub.PublishTx(topic, msg)
+	}); err != nil {
+		return errors.Wrap(err, "transaction error")
+	}
+	return nil
 }
 
 func (p *PubSub) Subscribe(ctx context.Context, topic string) <-chan *ReceivedMessage {
@@ -152,15 +148,23 @@ func (p *PubSub) Subscribe(ctx context.Context, topic string) <-chan *ReceivedMe
 	return ch
 }
 
-func (p *PubSub) QueueLength(topic string) (int, error) {
-	row := p.db.QueryRow(
-		"SELECT COUNT(*) FROM pubsub WHERE topic = ?",
-		topic,
-	)
-
+func (p *PubSub) QueueLength(ctx context.Context, topic string) (int, error) {
 	var count int
-	if err := row.Scan(&count); err != nil {
-		return 0, errors.Wrap(err, "row scan error")
+	if err := p.transactionProvider.Transact(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		row := tx.QueryRow(
+			"SELECT COUNT(*) FROM pubsub WHERE topic = ?",
+			topic,
+		)
+
+		var tmp int
+		if err := row.Scan(&tmp); err != nil {
+			return errors.Wrap(err, "row scan error")
+		}
+
+		count = tmp
+		return nil
+	}); err != nil {
+		return 0, errors.Wrap(err, "transaction error")
 	}
 
 	return count, nil
@@ -170,7 +174,7 @@ func (p *PubSub) subscribe(ctx context.Context, topic string, ch chan *ReceivedM
 	noMessagesCounter := 0
 
 	for {
-		msg, err := p.readMsg(topic)
+		msg, err := p.readMsg(ctx, topic)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				noMessagesCounter++
@@ -188,9 +192,14 @@ func (p *PubSub) subscribe(ctx context.Context, topic string, ch chan *ReceivedM
 				}
 			}
 
-			noMessagesCounter = 0
 			p.logger.Error().WithError(err).Message("error reading message")
-			continue
+
+			select {
+			case <-time.After(1 * time.Second):
+				continue
+			case <-ctx.Done():
+				return
+			}
 		}
 
 		noMessagesCounter = 0
@@ -204,11 +213,11 @@ func (p *PubSub) subscribe(ctx context.Context, topic string, ch chan *ReceivedM
 
 		select {
 		case <-receivedMsg.chAck:
-			if err := p.ack(receivedMsg.Message); err != nil {
+			if err := p.ack(ctx, receivedMsg.Message); err != nil {
 				p.logger.Error().WithError(err).Message("error acking a message")
 			}
 		case <-receivedMsg.chNack:
-			if err := p.nack(receivedMsg.Message); err != nil {
+			if err := p.nack(ctx, receivedMsg.Message); err != nil {
 				p.logger.Error().WithError(err).Message("error nacking a message")
 			}
 		case <-ctx.Done():
@@ -217,64 +226,106 @@ func (p *PubSub) subscribe(ctx context.Context, topic string, ch chan *ReceivedM
 	}
 }
 
-func (p *PubSub) readMsg(topic string) (Message, error) {
-	row := p.db.QueryRow(
-		"SELECT uuid, payload FROM pubsub WHERE topic = ? AND (backoff_until IS NULL OR backoff_until <= ?) ORDER BY RANDOM() LIMIT 1",
-		topic,
-		time.Now().Unix(),
-	)
+func (p *PubSub) readMsg(ctx context.Context, topic string) (Message, error) {
+	var msg Message
+	if err := p.transactionProvider.Transact(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		row := tx.QueryRow(
+			"SELECT uuid, payload FROM pubsub WHERE topic = ? AND (backoff_until IS NULL OR backoff_until <= ?) ORDER BY RANDOM() LIMIT 1",
+			topic,
+			time.Now().Unix(),
+		)
 
-	var uuid string
-	var payload []byte
-	if err := row.Scan(&uuid, &payload); err != nil {
-		return Message{}, errors.Wrap(err, "row scan error")
+		var uuid string
+		var payload []byte
+		if err := row.Scan(&uuid, &payload); err != nil {
+			return errors.Wrap(err, "row scan error")
+		}
+
+		tmp, err := NewMessage(uuid, payload)
+		if err != nil {
+			return errors.Wrap(err, "error creating a message")
+		}
+
+		msg = tmp
+		return nil
+	}); err != nil {
+		return Message{}, errors.Wrap(err, "transaction error")
 	}
 
-	return NewMessage(uuid, payload)
+	return msg, nil
 }
 
-func (p *PubSub) ack(msg Message) error {
-	_, err := p.db.Exec(
-		"DELETE FROM pubsub WHERE uuid = ?",
+func (p *PubSub) ack(ctx context.Context, msg Message) error {
+	return p.transactionProvider.Transact(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.Exec(
+			"DELETE FROM pubsub WHERE uuid = ?",
+			msg.uuid,
+		)
+		return err
+	})
+}
+
+func (p *PubSub) nack(ctx context.Context, msg Message) error {
+	return p.transactionProvider.Transact(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		row := tx.QueryRow(
+			"SELECT nack_count FROM pubsub WHERE uuid = ? LIMIT 1",
+			msg.uuid,
+		)
+
+		var nackCount int
+		if err := row.Scan(&nackCount); err != nil {
+			return errors.Wrap(err, "error calling scan")
+		}
+
+		nackCount = nackCount + 1
+		backoffDuration := p.backoffManager.GetMessageErrorBackoff(nackCount)
+		backoffUntil := time.Now().Add(backoffDuration)
+
+		p.logger.Trace().
+			WithField("until", backoffUntil).
+			WithField("duration", backoffDuration).
+			Message("backing off a message")
+
+		if _, err := tx.Exec(
+			"UPDATE pubsub SET nack_count = ?, backoff_until = ? WHERE uuid = ?",
+			nackCount,
+			backoffUntil.Unix(),
+			msg.uuid,
+		); err != nil {
+			return errors.Wrap(err, "error updating the message")
+		}
+
+		return nil
+
+	})
+}
+
+type TxPubSub struct {
+	tx     *sql.Tx
+	logger logging.Logger
+}
+
+func NewTxPubSub(
+	tx *sql.Tx,
+	logger logging.Logger,
+) *TxPubSub {
+	return &TxPubSub{
+		tx:     tx,
+		logger: logger,
+	}
+}
+
+func (p *TxPubSub) PublishTx(topic string, msg Message) error {
+	_, err := p.tx.Exec(
+		"INSERT INTO pubsub VALUES (?, ?, ?, ?, ?, ?)",
+		topic,
 		msg.uuid,
+		msg.payload,
+		time.Now().Unix(),
+		0,
+		nil,
 	)
 	return err
-}
-
-func (p *PubSub) nack(msg Message) error {
-	row := p.db.QueryRow(
-		"SELECT nack_count FROM pubsub WHERE uuid = ? LIMIT 1",
-		msg.uuid,
-	)
-
-	var nackCount int
-	if err := row.Scan(&nackCount); err != nil {
-		return errors.Wrap(err, "error calling scan")
-	}
-
-	nackCount = nackCount + 1
-	backoffDuration := p.backoffManager.GetMessageErrorBackoff(nackCount)
-	backoffUntil := time.Now().Add(backoffDuration)
-
-	p.logger.Trace().
-		WithField("until", backoffUntil).
-		WithField("duration", backoffDuration).
-		Message("backing off a message")
-
-	if _, err := p.db.Exec(
-		"UPDATE pubsub SET nack_count = ?, backoff_until = ? WHERE uuid = ?",
-		nackCount,
-		backoffUntil.Unix(),
-		msg.uuid,
-	); err != nil {
-		return errors.Wrap(err, "error updating the message")
-	}
-
-	return nil
-}
-
-type executor interface {
-	Exec(query string, args ...any) (sql.Result, error)
 }
 
 const (

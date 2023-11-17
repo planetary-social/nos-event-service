@@ -72,7 +72,6 @@ func buildTransactionSqliteAdapters(*sql.DB, *sql.Tx, buildTransactionSqliteAdap
 
 		sqliteTxAdaptersSet,
 		sqliteTxPubsubSet,
-		sqlitePubsubSet,
 	)
 	return app.Adapters{}, nil
 }
@@ -84,7 +83,6 @@ func buildTestTransactionSqliteAdapters(*sql.DB, *sql.Tx, buildTransactionSqlite
 
 		sqliteTxAdaptersSet,
 		sqliteTxPubsubSet,
-		sqlitePubsubSet,
 	)
 	return sqlite.TestAdapters{}, nil
 }

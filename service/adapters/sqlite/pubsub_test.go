@@ -1,7 +1,6 @@
 package sqlite_test
 
 import (
-	"context"
 	"sync"
 	"testing"
 	"time"
@@ -21,7 +20,7 @@ func TestPubSub_PublishDoesNotReturnErrors(t *testing.T) {
 	msg, err := sqlite.NewMessage(fixtures.SomeString(), nil)
 	require.NoError(t, err)
 
-	err = adapters.PubSub.Publish(fixtures.SomeString(), msg)
+	err = adapters.PubSub.Publish(ctx, fixtures.SomeString(), msg)
 	require.NoError(t, err)
 }
 
@@ -34,11 +33,11 @@ func TestPubSub_PublishingMessagesWithIdenticalUUIDsReturnsAnError(t *testing.T)
 	msg, err := sqlite.NewMessage(fixtures.SomeString(), nil)
 	require.NoError(t, err)
 
-	err = adapters.PubSub.Publish(fixtures.SomeString(), msg)
+	err = adapters.PubSub.Publish(ctx, fixtures.SomeString(), msg)
 	require.NoError(t, err)
 
-	err = adapters.PubSub.Publish(fixtures.SomeString(), msg)
-	require.EqualError(t, err, "UNIQUE constraint failed: pubsub.uuid")
+	err = adapters.PubSub.Publish(ctx, fixtures.SomeString(), msg)
+	require.EqualError(t, err, "transaction error: error calling the provided function: UNIQUE constraint failed: pubsub.uuid")
 }
 
 func TestPubSub_NackedMessagesAreRetried(t *testing.T) {
@@ -52,7 +51,7 @@ func TestPubSub_NackedMessagesAreRetried(t *testing.T) {
 
 	topic := fixtures.SomeString()
 
-	err = adapters.PubSub.Publish(topic, msg)
+	err = adapters.PubSub.Publish(ctx, topic, msg)
 	require.NoError(t, err)
 
 	var msgs []*sqlite.ReceivedMessage
@@ -106,7 +105,7 @@ func TestPubSub_MessageContainCorrectPayloadAndAckedMessagesAreNotRetried(t *tes
 
 			topic := fixtures.SomeString()
 
-			err = adapters.PubSub.Publish(topic, msg)
+			err = adapters.PubSub.Publish(ctx, topic, msg)
 			require.NoError(t, err)
 
 			var msgs []*sqlite.ReceivedMessage
@@ -143,7 +142,7 @@ func TestPubSub_NotAckedOrNackedMessagesBlock(t *testing.T) {
 
 	topic := fixtures.SomeString()
 
-	err = adapters.PubSub.Publish(topic, msg)
+	err = adapters.PubSub.Publish(ctx, topic, msg)
 	require.NoError(t, err)
 
 	var msgs []*sqlite.ReceivedMessage
@@ -177,33 +176,30 @@ func TestPubSub_QueueLengthReportsNumberOfElementsInQueue(t *testing.T) {
 
 	topic := fixtures.SomeString()
 
-	err = adapters.PubSub.Publish(topic, msg1)
+	err = adapters.PubSub.Publish(ctx, topic, msg1)
 	require.NoError(t, err)
 
-	n, err := adapters.PubSub.QueueLength(topic)
+	n, err := adapters.PubSub.QueueLength(ctx, topic)
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
 
-	err = adapters.PubSub.Publish(topic, msg2)
+	err = adapters.PubSub.Publish(ctx, topic, msg2)
 	require.NoError(t, err)
 
-	n, err = adapters.PubSub.QueueLength(topic)
+	n, err = adapters.PubSub.QueueLength(ctx, topic)
 	require.NoError(t, err)
 	require.Equal(t, 2, n)
 
 	go func() {
-		ctx, cancel := context.WithCancel(ctx)
-		defer cancel()
-
 		for msg := range adapters.PubSub.Subscribe(ctx, topic) {
 			err := msg.Ack()
 			require.NoError(t, err)
-			return
+			return // ack only one message
 		}
 	}()
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		n, err = adapters.PubSub.QueueLength(topic)
+		n, err = adapters.PubSub.QueueLength(ctx, topic)
 		assert.NoError(t, err)
 		assert.Equal(t, 1, n)
 	}, 10*time.Second, 100*time.Millisecond)

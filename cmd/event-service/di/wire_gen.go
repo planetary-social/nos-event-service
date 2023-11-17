@@ -45,7 +45,8 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 		Logger: logger,
 	}
 	genericAdaptersFactoryFn := newAdaptersFactoryFn(diBuildTransactionSqliteAdaptersDependencies)
-	genericTransactionProvider := sqlite.NewTransactionProvider(db, genericAdaptersFactoryFn)
+	databaseMutex := sqlite.NewDatabaseMutex()
+	genericTransactionProvider := sqlite.NewTransactionProvider(db, genericAdaptersFactoryFn, databaseMutex)
 	prometheusPrometheus, err := prometheus.NewPrometheus(logger)
 	if err != nil {
 		cleanup()
@@ -62,7 +63,8 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 		return Service{}, nil, err
 	}
 	processSavedEventHandler := app.NewProcessSavedEventHandler(genericTransactionProvider, relaysExtractor, contactsExtractor, externalEventPublisher, logger, prometheusPrometheus)
-	pubSub := sqlite.NewPubSub(db, logger)
+	sqliteGenericTransactionProvider := sqlite.NewPubSubTxTransactionProvider(db, databaseMutex)
+	pubSub := sqlite.NewPubSub(sqliteGenericTransactionProvider, logger)
 	subscriber := sqlite.NewSubscriber(pubSub, db)
 	updateMetricsHandler := app.NewUpdateMetricsHandler(genericTransactionProvider, subscriber, logger, prometheusPrometheus)
 	addPublicKeyToMonitorHandler := app.NewAddPublicKeyToMonitorHandler(genericTransactionProvider, logger, prometheusPrometheus)
@@ -119,8 +121,10 @@ func BuildTestAdapters(contextContext context.Context, tb testing.TB) (sqlite.Te
 		Logger: logger,
 	}
 	genericAdaptersFactoryFn := newTestAdaptersFactoryFn(diBuildTransactionSqliteAdaptersDependencies)
-	genericTransactionProvider := sqlite.NewTestTransactionProvider(db, genericAdaptersFactoryFn)
-	pubSub := sqlite.NewPubSub(db, logger)
+	databaseMutex := sqlite.NewDatabaseMutex()
+	genericTransactionProvider := sqlite.NewTestTransactionProvider(db, genericAdaptersFactoryFn, databaseMutex)
+	sqliteGenericTransactionProvider := sqlite.NewPubSubTxTransactionProvider(db, databaseMutex)
+	pubSub := sqlite.NewPubSub(sqliteGenericTransactionProvider, logger)
 	subscriber := sqlite.NewSubscriber(pubSub, db)
 	migrationsStorage, err := sqlite.NewMigrationsStorage(db)
 	if err != nil {
@@ -161,8 +165,8 @@ func buildTransactionSqliteAdapters(db *sql.DB, tx *sql.Tx, diBuildTransactionSq
 		return app.Adapters{}, err
 	}
 	logger := diBuildTransactionSqliteAdaptersDependencies.Logger
-	pubSub := sqlite.NewPubSub(db, logger)
-	publisher := sqlite.NewPublisher(pubSub, tx)
+	txPubSub := sqlite.NewTxPubSub(tx, logger)
+	publisher := sqlite.NewPublisher(txPubSub)
 	appAdapters := app.Adapters{
 		Events:              eventRepository,
 		Relays:              relayRepository,
@@ -185,8 +189,8 @@ func buildTestTransactionSqliteAdapters(db *sql.DB, tx *sql.Tx, diBuildTransacti
 		return sqlite.TestAdapters{}, err
 	}
 	logger := diBuildTransactionSqliteAdaptersDependencies.Logger
-	pubSub := sqlite.NewPubSub(db, logger)
-	publisher := sqlite.NewPublisher(pubSub, tx)
+	txPubSub := sqlite.NewTxPubSub(tx, logger)
+	publisher := sqlite.NewPublisher(txPubSub)
 	testAdapters := sqlite.TestAdapters{
 		EventRepository:               eventRepository,
 		RelayRepository:               relayRepository,

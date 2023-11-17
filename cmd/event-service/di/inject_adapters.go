@@ -15,9 +15,13 @@ import (
 
 var sqliteAdaptersSet = wire.NewSet(
 	newSqliteDB,
+	sqlite.NewDatabaseMutex,
 
 	sqlite.NewTransactionProvider,
 	wire.Bind(new(app.TransactionProvider), new(*sqlite.TransactionProvider)),
+
+	sqlite.NewPubSubTxTransactionProvider,
+	wire.Bind(new(sqlite.PubsubTransactionProvider), new(*sqlite.PubSubTxTransactionProvider)),
 
 	newAdaptersFactoryFn,
 
@@ -26,8 +30,12 @@ var sqliteAdaptersSet = wire.NewSet(
 
 var sqliteTestAdaptersSet = wire.NewSet(
 	newSqliteDB,
+	sqlite.NewDatabaseMutex,
 
 	sqlite.NewTestTransactionProvider,
+
+	sqlite.NewPubSubTxTransactionProvider,
+	wire.Bind(new(sqlite.PubsubTransactionProvider), new(*sqlite.PubSubTxTransactionProvider)),
 
 	newTestAdaptersFactoryFn,
 
@@ -46,6 +54,8 @@ var sqliteTxAdaptersSet = wire.NewSet(
 
 	sqlite.NewPublicKeysToMonitorRepository,
 	wire.Bind(new(app.PublicKeysToMonitorRepository), new(*sqlite.PublicKeysToMonitorRepository)),
+
+	sqlite.NewTxPubSub,
 )
 
 var adaptersSet = wire.NewSet(
