@@ -101,6 +101,9 @@ var downloaderSet = wire.NewSet(
 
 	relays.NewRelayConnections,
 	wire.Bind(new(app.RelayConnections), new(*relays.RelayConnections)),
+
+	app.NewDatabasePublicKeySource,
+	wire.Bind(new(app.PublicKeySource), new(*app.DatabasePublicKeySource)),
 )
 
 var domainSet = wire.NewSet(

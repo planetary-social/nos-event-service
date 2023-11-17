@@ -20,7 +20,7 @@ type ProcessSavedEventHandler struct {
 	transactionProvider    TransactionProvider
 	relaysExtractor        RelaysExtractor
 	contactsExtractor      ContactsExtractor
-	ExternalEventPublisher ExternalEventPublisher
+	externalEventPublisher ExternalEventPublisher
 	logger                 logging.Logger
 	metrics                Metrics
 }
@@ -37,7 +37,7 @@ func NewProcessSavedEventHandler(
 		transactionProvider:    transactionProvider,
 		relaysExtractor:        relaysExtractor,
 		contactsExtractor:      contactsExtractor,
-		ExternalEventPublisher: externalEventPublisher,
+		externalEventPublisher: externalEventPublisher,
 		logger:                 logger.New("processSavedEventHandler"),
 		metrics:                metrics,
 	}
@@ -55,7 +55,7 @@ func (h *ProcessSavedEventHandler) Handle(ctx context.Context, cmd ProcessSavedE
 		return errors.Wrap(err, "error saving relays and contacts")
 	}
 
-	if err := h.ExternalEventPublisher.PublishNewEventReceived(ctx, event); err != nil {
+	if err := h.externalEventPublisher.PublishNewEventReceived(ctx, event); err != nil {
 		return errors.Wrap(err, "error publishing the external event")
 	}
 

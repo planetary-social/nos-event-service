@@ -124,3 +124,33 @@ func (r *ContactRepository) GetCurrentContactsEvent(ctx context.Context, author 
 
 	return domain.NewEventFromRaw(payload)
 }
+
+func (r *ContactRepository) GetFollowees(ctx context.Context, publicKey domain.PublicKey) ([]domain.PublicKey, error) {
+	rows, err := r.tx.Query(`
+		SELECT PK2.public_key
+		FROM contacts_followees CF
+		LEFT JOIN  public_keys PK1 ON PK1.id=CF.follower_id
+		LEFT JOIN  public_keys PK2 ON PK2.id=CF.followee_id
+		WHERE PK1.public_key=$1`,
+		publicKey.Hex(),
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "error querying")
+	}
+
+	var result []domain.PublicKey
+	for rows.Next() {
+		var publicKeyTmp string
+		if err := rows.Scan(&publicKeyTmp); err != nil {
+			return nil, errors.Wrap(err, "scan err")
+		}
+
+		publicKey, err := domain.NewPublicKeyFromHex(publicKeyTmp)
+		if err != nil {
+			return nil, errors.Wrap(err, "error creating a public key")
+		}
+		result = append(result, publicKey)
+	}
+
+	return result, nil
+}

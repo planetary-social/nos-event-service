@@ -13,10 +13,11 @@ import (
 )
 
 type TestAdapters struct {
-	EventRepository   *EventRepository
-	RelayRepository   *RelayRepository
-	ContactRepository *ContactRepository
-	Publisher         *Publisher
+	EventRepository               *EventRepository
+	RelayRepository               *RelayRepository
+	ContactRepository             *ContactRepository
+	PublicKeysToMonitorRepository *PublicKeysToMonitorRepository
+	Publisher                     *Publisher
 }
 
 type TestedItems struct {
