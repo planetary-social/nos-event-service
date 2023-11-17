@@ -2,7 +2,6 @@ package relays
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"sync"
 	"time"
@@ -173,7 +172,7 @@ func (r *RelayConnection) run(ctx context.Context) error {
 
 	go func() {
 		if err := r.manageSubs(ctx, conn); err != nil {
-			if !errors.Is(err, context.Canceled) {
+			if !errors.Is(err, context.Canceled) && !errors.Is(err, websocket.ErrCloseSent) {
 				r.logger.Error().
 					WithError(err).
 					Message("error managing subs")
@@ -198,7 +197,7 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 	if envelope == nil {
 		defer r.metrics.ReportMessageReceived(r.address, MessageTypeUnknown, &err)
 		r.logger.Error().
-			WithField("messageBytesAsHex", hex.EncodeToString(messageBytes)).
+			WithField("message", string(messageBytes)).
 			Message("error parsing an incoming message")
 		return errors.New("error parsing message, we are never going to find out what error unfortunately due to the design of this library")
 	}

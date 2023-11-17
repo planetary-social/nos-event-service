@@ -41,7 +41,13 @@ func (e *ContactsExtractor) extractFromContacts(event Event) ([]PublicKey, error
 		if tag.IsProfile() {
 			publicKey, err := tag.Profile()
 			if err != nil {
-				return nil, errors.Wrap(err, "error grabbing the profile tag")
+				e.logger.
+					Debug().
+					WithError(err).
+					WithField("name", tag.Name()).
+					WithField("value", tag.FirstValue()).
+					Message("error grabbing the profile tag")
+				continue
 			}
 			results.Put(publicKey)
 		}

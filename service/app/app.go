@@ -8,7 +8,9 @@ import (
 )
 
 var (
-	ErrNoContactsEvent = errors.New("no contacts event")
+	ErrNoContactsEvent            = errors.New("no contacts event")
+	ErrEventNotFound              = errors.New("event not found")
+	ErrPublicKeyToMonitorNotFound = errors.New("public key to monitor not found")
 )
 
 type TransactionProvider interface {
@@ -25,6 +27,8 @@ type Adapters struct {
 
 type EventRepository interface {
 	Save(ctx context.Context, event domain.Event) error
+
+	// Get returns ErrEventNotFound.
 	Get(ctx context.Context, eventID domain.EventId) (domain.Event, error)
 }
 
@@ -39,13 +43,14 @@ type ContactRepository interface {
 	GetCurrentContactsEvent(ctx context.Context, author domain.PublicKey) (domain.Event, error)
 
 	SetContacts(ctx context.Context, event domain.Event, contacts []domain.PublicKey) error
-
 	GetFollowees(ctx context.Context, publicKey domain.PublicKey) ([]domain.PublicKey, error)
+	IsFolloweeOfMonitoredPublicKey(ctx context.Context, publicKey domain.PublicKey) (bool, error)
 }
 
 type PublicKeysToMonitorRepository interface {
 	Save(ctx context.Context, publicKeyToMonitor domain.PublicKeyToMonitor) error
 	List(ctx context.Context) ([]domain.PublicKeyToMonitor, error)
+	Get(ctx context.Context, publicKey domain.PublicKey) (domain.PublicKeyToMonitor, error)
 }
 
 type Publisher interface {

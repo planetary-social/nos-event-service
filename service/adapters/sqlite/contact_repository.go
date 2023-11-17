@@ -154,3 +154,30 @@ func (r *ContactRepository) GetFollowees(ctx context.Context, publicKey domain.P
 
 	return result, nil
 }
+
+func (r *ContactRepository) IsFolloweeOfMonitoredPublicKey(ctx context.Context, publicKey domain.PublicKey) (bool, error) {
+	row := r.tx.QueryRow(`
+		SELECT PK1.public_key
+		FROM contacts_followees CF
+		LEFT JOIN  public_keys PK1 ON PK1.id=CF.follower_id
+		LEFT JOIN  public_keys PK2 ON PK2.id=CF.followee_id
+		WHERE EXISTS(
+		    SELECT *
+		    FROM public_keys_to_monitor PKTM
+			WHERE PKTM.public_key=PK1.public_key
+		) AND
+		    PK2.public_key=$1`,
+		publicKey.Hex(),
+	)
+
+	var tmp string
+	if err := row.Scan(&tmp); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "error querying")
+	}
+
+	return true, nil
+
+}

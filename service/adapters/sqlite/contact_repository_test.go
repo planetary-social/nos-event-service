@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/planetary-social/nos-event-service/internal/fixtures"
 	"github.com/planetary-social/nos-event-service/service/adapters/sqlite"
@@ -13,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestEventRepository_GetCurrentContactsEventReturnsPredefinedError(t *testing.T) {
+func TestContactRepository_GetCurrentContactsEventReturnsPredefinedError(t *testing.T) {
 	ctx := fixtures.TestContext(t)
 	adapters := NewTestAdapters(ctx, t)
 
@@ -26,7 +27,7 @@ func TestEventRepository_GetCurrentContactsEventReturnsPredefinedError(t *testin
 	require.NoError(t, err)
 }
 
-func TestEventRepository_GetFollowwesReturnsEmptyListWhenThereIsNoData(t *testing.T) {
+func TestContactRepository_GetFollowwesReturnsEmptyListWhenThereIsNoData(t *testing.T) {
 	ctx := fixtures.TestContext(t)
 	adapters := NewTestAdapters(ctx, t)
 
@@ -40,7 +41,7 @@ func TestEventRepository_GetFollowwesReturnsEmptyListWhenThereIsNoData(t *testin
 	require.NoError(t, err)
 }
 
-func TestEventRepository_ContactsAreReplacesForGivenPublicKey(t *testing.T) {
+func TestContactRepository_ContactsAreReplacesForGivenPublicKey(t *testing.T) {
 	ctx := fixtures.TestContext(t)
 	adapters := NewTestAdapters(ctx, t)
 
@@ -163,6 +164,72 @@ func TestEventRepository_ContactsAreReplacesForGivenPublicKey(t *testing.T) {
 		slices.SortFunc(followees, cmp)
 		slices.SortFunc(expected, cmp)
 		require.Equal(t, expected, followees)
+
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func TestContactRepository_IsFolloweeOfMonitoredPublicKey(t *testing.T) {
+	ctx := fixtures.TestContext(t)
+	adapters := NewTestAdapters(ctx, t)
+
+	pk1, sk1 := fixtures.SomeKeyPair()
+	event1 := fixtures.SomeEventWithAuthor(sk1)
+	followee11 := fixtures.SomePublicKey()
+	followee12 := fixtures.SomePublicKey()
+	publicKeyToMonitor := domain.MustNewPublicKeyToMonitor(pk1, time.Now(), time.Now())
+
+	_, sk2 := fixtures.SomeKeyPair()
+	event2 := fixtures.SomeEventWithAuthor(sk2)
+	followee21 := fixtures.SomePublicKey()
+	followee22 := fixtures.SomePublicKey()
+
+	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.EventRepository.Save(ctx, event1)
+		require.NoError(t, err)
+
+		err = adapters.EventRepository.Save(ctx, event2)
+		require.NoError(t, err)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.PublicKeysToMonitorRepository.Save(ctx, publicKeyToMonitor)
+		require.NoError(t, err)
+
+		err = adapters.ContactRepository.SetContacts(ctx, event1, []domain.PublicKey{followee11, followee12})
+		require.NoError(t, err)
+
+		err = adapters.ContactRepository.SetContacts(ctx, event2, []domain.PublicKey{followee21, followee22})
+		require.NoError(t, err)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		ok, err := adapters.ContactRepository.IsFolloweeOfMonitoredPublicKey(ctx, followee11)
+		require.NoError(t, err)
+		require.True(t, ok)
+
+		ok, err = adapters.ContactRepository.IsFolloweeOfMonitoredPublicKey(ctx, followee12)
+		require.NoError(t, err)
+		require.True(t, ok)
+
+		ok, err = adapters.ContactRepository.IsFolloweeOfMonitoredPublicKey(ctx, followee21)
+		require.NoError(t, err)
+		require.False(t, ok)
+
+		ok, err = adapters.ContactRepository.IsFolloweeOfMonitoredPublicKey(ctx, followee22)
+		require.NoError(t, err)
+		require.False(t, ok)
+
+		ok, err = adapters.ContactRepository.IsFolloweeOfMonitoredPublicKey(ctx, fixtures.SomePublicKey())
+		require.NoError(t, err)
+		require.False(t, ok)
 
 		return nil
 	})
