@@ -4,7 +4,7 @@ WORKDIR /usr/src/app
 COPY . .
 # get ssl certs to copy into scratch image, as it won't have them by default.
 RUN apt update && apt-get install git ca-certificates && update-ca-certificates
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -v -o /usr/local/bin/event-service ./cmd/event-service
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -v -o /event-service ./cmd/event-service
 
 
 FROM gcr.io/distroless/cc-debian12
