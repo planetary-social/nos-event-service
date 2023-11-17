@@ -47,3 +47,14 @@ func TestSet_Clear(t *testing.T) {
 
 	require.False(t, s.Contains(0))
 }
+
+func TestSet_Equal(t *testing.T) {
+	require.True(t, NewSetVariadic(1, 2, 3).Equal(NewSetVariadic(1, 2, 3)))
+	require.False(t, NewSetVariadic(1, 2).Equal(NewSetVariadic(1, 2, 3)))
+	require.False(t, NewSetVariadic(1, 2, 3).Equal(NewSetVariadic(1, 2)))
+	require.False(t, NewSetVariadic(1, 2, 4).Equal(NewSetVariadic(1, 2, 3)))
+	require.False(t, NewSetVariadic(1, 2, 3).Equal(NewSetVariadic(1, 2, 4)))
+	require.True(t, NewEmptySet[int]().Equal(NewEmptySet[int]()))
+	require.False(t, NewSetVariadic(1, 2, 3).Equal(NewEmptySet[int]()))
+	require.False(t, NewEmptySet[int]().Equal(NewSetVariadic(1, 2, 4)))
+}
