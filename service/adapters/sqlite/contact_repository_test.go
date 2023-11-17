@@ -2,6 +2,8 @@ package sqlite_test
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/planetary-social/nos-event-service/internal/fixtures"
@@ -18,6 +20,20 @@ func TestEventRepository_GetCurrentContactsEventReturnsPredefinedError(t *testin
 	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		_, err := adapters.ContactRepository.GetCurrentContactsEvent(ctx, fixtures.SomePublicKey())
 		require.ErrorIs(t, err, app.ErrNoContactsEvent)
+
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func TestEventRepository_GetFollowwesReturnsEmptyListWhenThereIsNoData(t *testing.T) {
+	ctx := fixtures.TestContext(t)
+	adapters := NewTestAdapters(ctx, t)
+
+	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		result, err := adapters.ContactRepository.GetFollowees(ctx, fixtures.SomePublicKey())
+		require.NoError(t, err)
+		require.Empty(t, result)
 
 		return nil
 	})
@@ -66,6 +82,10 @@ func TestEventRepository_ContactsAreReplacesForGivenPublicKey(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	cmp := func(a, b domain.PublicKey) int {
+		return strings.Compare(a.Hex(), b.Hex())
+	}
+
 	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		current1, err := adapters.ContactRepository.GetCurrentContactsEvent(ctx, pk1)
 		require.NoError(t, err)
@@ -74,6 +94,30 @@ func TestEventRepository_ContactsAreReplacesForGivenPublicKey(t *testing.T) {
 		current2, err := adapters.ContactRepository.GetCurrentContactsEvent(ctx, pk2)
 		require.NoError(t, err)
 		require.Equal(t, event2.Id(), current2.Id())
+
+		followees, err := adapters.ContactRepository.GetFollowees(ctx, pk1)
+		require.NoError(t, err)
+
+		expected := []domain.PublicKey{
+			followee11,
+			followee12,
+		}
+
+		slices.SortFunc(followees, cmp)
+		slices.SortFunc(expected, cmp)
+		require.Equal(t, expected, followees)
+
+		followees, err = adapters.ContactRepository.GetFollowees(ctx, pk2)
+		require.NoError(t, err)
+
+		expected = []domain.PublicKey{
+			followee21,
+			followee22,
+		}
+
+		slices.SortFunc(followees, cmp)
+		slices.SortFunc(expected, cmp)
+		require.Equal(t, expected, followees)
 
 		return nil
 	})
@@ -95,6 +139,30 @@ func TestEventRepository_ContactsAreReplacesForGivenPublicKey(t *testing.T) {
 		current2, err := adapters.ContactRepository.GetCurrentContactsEvent(ctx, pk2)
 		require.NoError(t, err)
 		require.Equal(t, event3.Id(), current2.Id())
+
+		followees, err := adapters.ContactRepository.GetFollowees(ctx, pk1)
+		require.NoError(t, err)
+
+		expected := []domain.PublicKey{
+			followee11,
+			followee12,
+		}
+
+		slices.SortFunc(followees, cmp)
+		slices.SortFunc(expected, cmp)
+		require.Equal(t, expected, followees)
+
+		followees, err = adapters.ContactRepository.GetFollowees(ctx, pk2)
+		require.NoError(t, err)
+
+		expected = []domain.PublicKey{
+			followee31,
+			followee32,
+		}
+
+		slices.SortFunc(followees, cmp)
+		slices.SortFunc(expected, cmp)
+		require.Equal(t, expected, followees)
 
 		return nil
 	})

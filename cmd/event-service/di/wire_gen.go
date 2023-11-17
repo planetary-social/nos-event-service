@@ -45,7 +45,8 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 		Logger: logger,
 	}
 	genericAdaptersFactoryFn := newAdaptersFactoryFn(diBuildTransactionSqliteAdaptersDependencies)
-	genericTransactionProvider := sqlite.NewTransactionProvider(db, genericAdaptersFactoryFn)
+	databaseMutex := sqlite.NewDatabaseMutex()
+	genericTransactionProvider := sqlite.NewTransactionProvider(db, genericAdaptersFactoryFn, databaseMutex)
 	prometheusPrometheus, err := prometheus.NewPrometheus(logger)
 	if err != nil {
 		cleanup()
@@ -62,20 +63,24 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 		return Service{}, nil, err
 	}
 	processSavedEventHandler := app.NewProcessSavedEventHandler(genericTransactionProvider, relaysExtractor, contactsExtractor, externalEventPublisher, logger, prometheusPrometheus)
-	pubSub := sqlite.NewPubSub(db, logger)
+	sqliteGenericTransactionProvider := sqlite.NewPubSubTxTransactionProvider(db, databaseMutex)
+	pubSub := sqlite.NewPubSub(sqliteGenericTransactionProvider, logger)
 	subscriber := sqlite.NewSubscriber(pubSub, db)
 	updateMetricsHandler := app.NewUpdateMetricsHandler(genericTransactionProvider, subscriber, logger, prometheusPrometheus)
+	addPublicKeyToMonitorHandler := app.NewAddPublicKeyToMonitorHandler(genericTransactionProvider, logger, prometheusPrometheus)
 	application := app.Application{
-		SaveReceivedEvent: saveReceivedEventHandler,
-		ProcessSavedEvent: processSavedEventHandler,
-		UpdateMetrics:     updateMetricsHandler,
+		SaveReceivedEvent:     saveReceivedEventHandler,
+		ProcessSavedEvent:     processSavedEventHandler,
+		UpdateMetrics:         updateMetricsHandler,
+		AddPublicKeyToMonitor: addPublicKeyToMonitorHandler,
 	}
 	server := http.NewServer(configConfig, logger, application, prometheusPrometheus)
 	bootstrapRelaySource := relays.NewBootstrapRelaySource()
 	databaseRelaySource := app.NewDatabaseRelaySource(genericTransactionProvider, logger)
+	databasePublicKeySource := app.NewDatabasePublicKeySource(genericTransactionProvider, logger)
 	relayConnections := relays.NewRelayConnections(contextContext, logger, prometheusPrometheus)
 	receivedEventPubSub := memorypubsub.NewReceivedEventPubSub()
-	relayDownloaderFactory := app.NewRelayDownloaderFactory(relayConnections, receivedEventPubSub, logger, prometheusPrometheus)
+	relayDownloaderFactory := app.NewRelayDownloaderFactory(databasePublicKeySource, relayConnections, receivedEventPubSub, logger, prometheusPrometheus)
 	downloader := app.NewDownloader(bootstrapRelaySource, databaseRelaySource, logger, prometheusPrometheus, relayDownloaderFactory)
 	receivedEventSubscriber := memorypubsub2.NewReceivedEventSubscriber(receivedEventPubSub, saveReceivedEventHandler, logger)
 	eventSavedEventSubscriber := sqlitepubsub.NewEventSavedEventSubscriber(processSavedEventHandler, subscriber, logger, prometheusPrometheus)
@@ -116,8 +121,10 @@ func BuildTestAdapters(contextContext context.Context, tb testing.TB) (sqlite.Te
 		Logger: logger,
 	}
 	genericAdaptersFactoryFn := newTestAdaptersFactoryFn(diBuildTransactionSqliteAdaptersDependencies)
-	genericTransactionProvider := sqlite.NewTestTransactionProvider(db, genericAdaptersFactoryFn)
-	pubSub := sqlite.NewPubSub(db, logger)
+	databaseMutex := sqlite.NewDatabaseMutex()
+	genericTransactionProvider := sqlite.NewTestTransactionProvider(db, genericAdaptersFactoryFn, databaseMutex)
+	sqliteGenericTransactionProvider := sqlite.NewPubSubTxTransactionProvider(db, databaseMutex)
+	pubSub := sqlite.NewPubSub(sqliteGenericTransactionProvider, logger)
 	subscriber := sqlite.NewSubscriber(pubSub, db)
 	migrationsStorage, err := sqlite.NewMigrationsStorage(db)
 	if err != nil {
@@ -153,14 +160,19 @@ func buildTransactionSqliteAdapters(db *sql.DB, tx *sql.Tx, diBuildTransactionSq
 	}
 	relayRepository := sqlite.NewRelayRepository(tx)
 	contactRepository := sqlite.NewContactRepository(tx)
+	publicKeysToMonitorRepository, err := sqlite.NewPublicKeysToMonitorRepository(tx)
+	if err != nil {
+		return app.Adapters{}, err
+	}
 	logger := diBuildTransactionSqliteAdaptersDependencies.Logger
-	pubSub := sqlite.NewPubSub(db, logger)
-	publisher := sqlite.NewPublisher(pubSub, tx)
+	txPubSub := sqlite.NewTxPubSub(tx, logger)
+	publisher := sqlite.NewPublisher(txPubSub)
 	appAdapters := app.Adapters{
-		Events:    eventRepository,
-		Relays:    relayRepository,
-		Contacts:  contactRepository,
-		Publisher: publisher,
+		Events:              eventRepository,
+		Relays:              relayRepository,
+		Contacts:            contactRepository,
+		PublicKeysToMonitor: publicKeysToMonitorRepository,
+		Publisher:           publisher,
 	}
 	return appAdapters, nil
 }
@@ -172,14 +184,19 @@ func buildTestTransactionSqliteAdapters(db *sql.DB, tx *sql.Tx, diBuildTransacti
 	}
 	relayRepository := sqlite.NewRelayRepository(tx)
 	contactRepository := sqlite.NewContactRepository(tx)
+	publicKeysToMonitorRepository, err := sqlite.NewPublicKeysToMonitorRepository(tx)
+	if err != nil {
+		return sqlite.TestAdapters{}, err
+	}
 	logger := diBuildTransactionSqliteAdaptersDependencies.Logger
-	pubSub := sqlite.NewPubSub(db, logger)
-	publisher := sqlite.NewPublisher(pubSub, tx)
+	txPubSub := sqlite.NewTxPubSub(tx, logger)
+	publisher := sqlite.NewPublisher(txPubSub)
 	testAdapters := sqlite.TestAdapters{
-		EventRepository:   eventRepository,
-		RelayRepository:   relayRepository,
-		ContactRepository: contactRepository,
-		Publisher:         publisher,
+		EventRepository:               eventRepository,
+		RelayRepository:               relayRepository,
+		ContactRepository:             contactRepository,
+		PublicKeysToMonitorRepository: publicKeysToMonitorRepository,
+		Publisher:                     publisher,
 	}
 	return testAdapters, nil
 }
@@ -194,6 +211,6 @@ type buildTransactionSqliteAdaptersDependencies struct {
 	Logger logging.Logger
 }
 
-var downloaderSet = wire.NewSet(app.NewRelayDownloaderFactory, app.NewDownloader, relays.NewBootstrapRelaySource, wire.Bind(new(app.BootstrapRelaySource), new(*relays.BootstrapRelaySource)), app.NewDatabaseRelaySource, wire.Bind(new(app.RelaySource), new(*app.DatabaseRelaySource)), relays.NewRelayConnections, wire.Bind(new(app.RelayConnections), new(*relays.RelayConnections)))
+var downloaderSet = wire.NewSet(app.NewRelayDownloaderFactory, app.NewDownloader, relays.NewBootstrapRelaySource, wire.Bind(new(app.BootstrapRelaySource), new(*relays.BootstrapRelaySource)), app.NewDatabaseRelaySource, wire.Bind(new(app.RelaySource), new(*app.DatabaseRelaySource)), relays.NewRelayConnections, wire.Bind(new(app.RelayConnections), new(*relays.RelayConnections)), app.NewDatabasePublicKeySource, wire.Bind(new(app.PublicKeySource), new(*app.DatabasePublicKeySource)))
 
 var domainSet = wire.NewSet(domain.NewRelaysExtractor, wire.Bind(new(app.RelaysExtractor), new(*domain.RelaysExtractor)), domain.NewContactsExtractor, wire.Bind(new(app.ContactsExtractor), new(*domain.ContactsExtractor)))

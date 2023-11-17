@@ -94,6 +94,18 @@ func (m *MigrationFns) Initial(ctx context.Context, state migrations.State, save
 		return errors.Wrap(err, "error creating the contacts_followees table")
 	}
 
+	_, err = m.db.Exec(`
+		CREATE TABLE IF NOT EXISTS public_keys_to_monitor (
+		    id INTEGER PRIMARY KEY,
+			public_key TEXT UNIQUE,
+			created_at INTEGER,
+			updated_at INTEGER
+		);`,
+	)
+	if err != nil {
+		return errors.Wrap(err, "error creating the public_keys_to_monitor table")
+	}
+
 	return nil
 }
 

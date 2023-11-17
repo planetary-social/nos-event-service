@@ -25,5 +25,5 @@ func (s *Subscriber) SubscribeToEventSaved(ctx context.Context) <-chan *Received
 }
 
 func (s *Subscriber) EventSavedQueueLength(ctx context.Context) (int, error) {
-	return s.pubsub.QueueLength(EventSavedTopic)
+	return s.pubsub.QueueLength(ctx, EventSavedTopic)
 }

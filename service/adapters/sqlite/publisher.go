@@ -2,7 +2,6 @@ package sqlite
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 
 	"github.com/boreq/errors"
@@ -13,12 +12,11 @@ import (
 const EventSavedTopic = "event_saved"
 
 type Publisher struct {
-	pubsub *PubSub
-	tx     *sql.Tx
+	pubsub *TxPubSub
 }
 
-func NewPublisher(pubsub *PubSub, tx *sql.Tx) *Publisher {
-	return &Publisher{pubsub: pubsub, tx: tx}
+func NewPublisher(pubsub *TxPubSub) *Publisher {
+	return &Publisher{pubsub: pubsub}
 }
 
 func (p *Publisher) PublishEventSaved(ctx context.Context, id domain.EventId) error {
@@ -36,7 +34,7 @@ func (p *Publisher) PublishEventSaved(ctx context.Context, id domain.EventId) er
 		return errors.Wrap(err, "error creating a message")
 	}
 
-	return p.pubsub.PublishTx(p.tx, EventSavedTopic, msg)
+	return p.pubsub.PublishTx(EventSavedTopic, msg)
 }
 
 type EventSavedEventTransport struct {

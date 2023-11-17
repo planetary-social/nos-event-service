@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"sync"
 
 	"github.com/boreq/errors"
 	"github.com/hashicorp/go-multierror"
@@ -13,10 +14,11 @@ import (
 )
 
 type TestAdapters struct {
-	EventRepository   *EventRepository
-	RelayRepository   *RelayRepository
-	ContactRepository *ContactRepository
-	Publisher         *Publisher
+	EventRepository               *EventRepository
+	RelayRepository               *RelayRepository
+	ContactRepository             *ContactRepository
+	PublicKeysToMonitorRepository *PublicKeysToMonitorRepository
+	Publisher                     *Publisher
 }
 
 type TestedItems struct {
@@ -42,38 +44,60 @@ func Open(conf config.Config) (*sql.DB, error) {
 type AdaptersFactoryFn = GenericAdaptersFactoryFn[app.Adapters]
 type TransactionProvider = GenericTransactionProvider[app.Adapters]
 
-func NewTransactionProvider(db *sql.DB, fn AdaptersFactoryFn) *TransactionProvider {
+func NewTransactionProvider(
+	db *sql.DB,
+	fn AdaptersFactoryFn,
+	mutex *DatabaseMutex,
+) *TransactionProvider {
 	return &TransactionProvider{
-		db: db,
-		fn: fn,
+		db:    db,
+		fn:    fn,
+		mutex: mutex,
 	}
 }
 
 type TestAdaptersFactoryFn = GenericAdaptersFactoryFn[TestAdapters]
 type TestTransactionProvider = GenericTransactionProvider[TestAdapters]
 
-func NewTestTransactionProvider(db *sql.DB, fn TestAdaptersFactoryFn) *TestTransactionProvider {
+func NewTestTransactionProvider(
+	db *sql.DB,
+	fn TestAdaptersFactoryFn,
+	mutex *DatabaseMutex,
+) *TestTransactionProvider {
 	return &TestTransactionProvider{
+		db:    db,
+		fn:    fn,
+		mutex: mutex,
+	}
+}
+
+type PubSubTxTransactionProvider = GenericTransactionProvider[*sql.Tx]
+
+func NewPubSubTxTransactionProvider(
+	db *sql.DB,
+	mutex *DatabaseMutex,
+) *PubSubTxTransactionProvider {
+	return &PubSubTxTransactionProvider{
 		db: db,
-		fn: fn,
+		fn: func(db *sql.DB, tx *sql.Tx) (*sql.Tx, error) {
+			return tx, nil
+		},
+		mutex: mutex,
 	}
 }
 
 type GenericAdaptersFactoryFn[T any] func(*sql.DB, *sql.Tx) (T, error)
 
 type GenericTransactionProvider[T any] struct {
-	db *sql.DB
-	fn GenericAdaptersFactoryFn[T]
-}
-
-func NewGenericTransactionProvider[T any](db *sql.DB, fn GenericAdaptersFactoryFn[T]) *GenericTransactionProvider[T] {
-	return &GenericTransactionProvider[T]{
-		db: db,
-		fn: fn,
-	}
+	db    *sql.DB
+	fn    GenericAdaptersFactoryFn[T]
+	mutex *DatabaseMutex
 }
 
 func (t *GenericTransactionProvider[T]) Transact(ctx context.Context, f func(context.Context, T) error) error {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+
 	tx, err := t.db.BeginTx(ctx, nil)
 	if err != nil {
 		return errors.Wrap(err, "error starting the transaction")
@@ -99,4 +123,20 @@ func (t *GenericTransactionProvider[T]) Transact(ctx context.Context, f func(con
 	}
 
 	return nil
+}
+
+type DatabaseMutex struct {
+	m sync.Mutex
+}
+
+func NewDatabaseMutex() *DatabaseMutex {
+	return &DatabaseMutex{}
+}
+
+func (m *DatabaseMutex) Lock() {
+	m.m.Lock()
+}
+
+func (m *DatabaseMutex) Unlock() {
+	m.m.Unlock()
 }

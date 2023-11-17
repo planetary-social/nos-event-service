@@ -16,10 +16,11 @@ type TransactionProvider interface {
 }
 
 type Adapters struct {
-	Events    EventRepository
-	Relays    RelayRepository
-	Contacts  ContactRepository
-	Publisher Publisher
+	Events              EventRepository
+	Relays              RelayRepository
+	Contacts            ContactRepository
+	PublicKeysToMonitor PublicKeysToMonitorRepository
+	Publisher           Publisher
 }
 
 type EventRepository interface {
@@ -38,6 +39,13 @@ type ContactRepository interface {
 	GetCurrentContactsEvent(ctx context.Context, author domain.PublicKey) (domain.Event, error)
 
 	SetContacts(ctx context.Context, event domain.Event, contacts []domain.PublicKey) error
+
+	GetFollowees(ctx context.Context, publicKey domain.PublicKey) ([]domain.PublicKey, error)
+}
+
+type PublicKeysToMonitorRepository interface {
+	Save(ctx context.Context, publicKeyToMonitor domain.PublicKeyToMonitor) error
+	List(ctx context.Context) ([]domain.PublicKeyToMonitor, error)
 }
 
 type Publisher interface {
@@ -49,9 +57,10 @@ type ExternalEventPublisher interface {
 }
 
 type Application struct {
-	SaveReceivedEvent *SaveReceivedEventHandler
-	ProcessSavedEvent *ProcessSavedEventHandler
-	UpdateMetrics     *UpdateMetricsHandler
+	SaveReceivedEvent     *SaveReceivedEventHandler
+	ProcessSavedEvent     *ProcessSavedEventHandler
+	UpdateMetrics         *UpdateMetricsHandler
+	AddPublicKeyToMonitor *AddPublicKeyToMonitorHandler
 }
 
 type ReceivedEvent struct {

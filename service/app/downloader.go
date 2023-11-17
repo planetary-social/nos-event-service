@@ -14,9 +14,11 @@ import (
 )
 
 const (
-	downloadEventsFromLast  = 24 * time.Hour
-	storeMetricsEvery       = 30 * time.Second
-	refreshKnownRelaysEvery = 1 * time.Minute
+	downloadEventsFromLast = 24 * time.Hour
+	storeMetricsEvery      = 30 * time.Second
+
+	refreshKnownRelaysEvery     = 1 * time.Minute
+	refreshKnownPublicKeysEvery = 1 * time.Minute
 )
 
 var (
@@ -42,6 +44,10 @@ type RelaySource interface {
 
 type RelayConnections interface {
 	GetEvents(ctx context.Context, relayAddress domain.RelayAddress, filter domain.Filter) (<-chan relays.EventOrEndOfSavedEvents, error)
+}
+
+type PublicKeySource interface {
+	GetPublicKeys(ctx context.Context) ([]domain.PublicKey, error)
 }
 
 type Downloader struct {
@@ -174,11 +180,12 @@ func (d *Downloader) getRelays(ctx context.Context) (*internal.Set[domain.RelayA
 type RelayDownloader struct {
 	address domain.RelayAddress
 
-	//downloaders     map[relays.RelayAddress]context.CancelFunc
-	//downloadersLock sync.Mutex
+	downloaders     map[domain.PublicKey]context.CancelFunc
+	downloadersLock sync.Mutex
 
 	receivedEventPublisher ReceivedEventPublisher
 	relayConnections       RelayConnections
+	publicKeySource        PublicKeySource
 	logger                 logging.Logger
 	metrics                Metrics
 }
@@ -187,14 +194,18 @@ func NewRelayDownloader(
 	address domain.RelayAddress,
 	receivedEventPublisher ReceivedEventPublisher,
 	relayConnections RelayConnections,
+	publicKeySource PublicKeySource,
 	logger logging.Logger,
 	metrics Metrics,
 ) *RelayDownloader {
 	v := &RelayDownloader{
 		address: address,
 
+		downloaders: make(map[domain.PublicKey]context.CancelFunc),
+
 		receivedEventPublisher: receivedEventPublisher,
 		relayConnections:       relayConnections,
+		publicKeySource:        publicKeySource,
 		logger:                 logger.New(fmt.Sprintf("relayDownloader(%s)", address.String())),
 		metrics:                metrics,
 	}
@@ -202,8 +213,6 @@ func NewRelayDownloader(
 }
 
 func (d *RelayDownloader) Run(ctx context.Context) {
-	//go d.storeMetricsLoop(ctx)
-
 	go d.downloadMessages(ctx, domain.NewFilter(
 		nil,
 		globalEventTypesToDownload,
@@ -211,20 +220,21 @@ func (d *RelayDownloader) Run(ctx context.Context) {
 		d.downloadSince(),
 	))
 
-	//for {
-	//	if err := d.refreshRelays(ctx); err != nil {
-	//		d.logger.Error().
-	//			WithError(err).
-	//			Message("error connecting and downloading")
-	//	}
-	//
-	//	select {
-	//	case <-ctx.Done():
-	//		return
-	//	case <-time.After(refreshPublicKeyDownloaderRelaysEvery):
-	//		continue
-	//	}
-	//}
+	for {
+		if err := d.refreshPublicKeys(ctx); err != nil {
+			d.logger.
+				Error().
+				WithError(err).
+				Message("error refreshing public keys")
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(refreshKnownPublicKeysEvery):
+			continue
+		}
+	}
 }
 
 func (d *RelayDownloader) downloadSince() *time.Time {
@@ -232,84 +242,53 @@ func (d *RelayDownloader) downloadSince() *time.Time {
 
 }
 
-//func (d *RelayDownloader) storeMetricsLoop(ctx context.Context) {
-//	for {
-//		d.storeMetrics()
-//
-//		select {
-//		case <-time.After(storeMetricsEvery):
-//		case <-ctx.Done():
-//			return
-//		}
-//	}
-//}
-//
-//func (d *RelayDownloader) storeMetrics() {
-//	d.downloadersLock.Lock()
-//	defer d.downloadersLock.Unlock()
-//
-//	d.metrics.ReportNumberOfPublicKeyDownloaderRelays(d.publicKey, len(d.downloaders))
-//}
-//
-//func (d *RelayDownloader) refreshRelays(ctx context.Context) error {
-//	relayAddressesSet, err := d.getRelayAddresses(ctx)
-//	if err != nil {
-//		return errors.Wrap(err, "error getting relay addresses")
-//	}
-//
-//	d.downloadersLock.Lock()
-//	defer d.downloadersLock.Unlock()
-//
-//	for relayAddress, cancelFn := range d.downloaders {
-//		if !relayAddressesSet.Contains(relayAddress) {
-//			d.logger.Trace().
-//				WithField("relayAddress", relayAddress.String()).
-//				Message("stopping a relay downloader")
-//			delete(d.downloaders, relayAddress)
-//			cancelFn()
-//		}
-//	}
-//
-//	for _, relayAddress := range relayAddressesSet.List() {
-//		if _, ok := d.downloaders[relayAddress]; !ok {
-//			d.logger.Trace().
-//				WithField("relayAddress", relayAddress.String()).
-//				Message("creating a relay downloader")
-//
-//			ctx, cancel := context.WithCancel(ctx)
-//			go d.downloadMessages(ctx, relayAddress)
-//			d.downloaders[relayAddress] = cancel
-//		}
-//	}
-//
-//	return nil
-//}
-//
-//func (d *RelayDownloader) getRelayAddresses(ctx context.Context) (*internal.Set[relays.RelayAddress], error) {
-//	ctx, cancel := context.WithCancel(ctx)
-//	defer cancel()
-//
-//	relayAddresses, err := d.relaySource.GetRelays(ctx, d.publicKey)
-//	if err != nil {
-//		return nil, errors.Wrap(err, "error getting relayAddresses")
-//	}
-//
-//	d.logger.Debug().
-//		WithField("numberOfAddresses", len(relayAddresses)).
-//		WithField("publicKey", d.publicKey.Hex()).
-//		Message("got relay addresses")
-//
-//	normalizedRelayAddresses := internal.NewEmptySet[relays.RelayAddress]()
-//	for _, relayAddress := range relayAddresses {
-//		normalizedRelayAddress, err := domain.NormalizeRelayAddress(relayAddress)
-//		if err != nil {
-//			return nil, errors.Wrapf(err, "error normalizing a relay address '%s'", relayAddress.String())
-//		}
-//		normalizedRelayAddresses.Put(normalizedRelayAddress)
-//	}
-//
-//	return normalizedRelayAddresses, nil
-//}
+func (d *RelayDownloader) refreshPublicKeys(ctx context.Context) error {
+	publicKeys, err := d.publicKeySource.GetPublicKeys(ctx)
+	if err != nil {
+		return errors.Wrap(err, "error getting relay addresses")
+	}
+
+	d.logger.
+		Trace().
+		WithField("n", len(publicKeys)).
+		Message("got public keys")
+
+	publicKeysSet := internal.NewSet(publicKeys)
+
+	d.downloadersLock.Lock()
+	defer d.downloadersLock.Unlock()
+
+	for publicKey, cancelFn := range d.downloaders {
+		if !publicKeysSet.Contains(publicKey) {
+			d.logger.
+				Trace().
+				WithField("publicKey", publicKey.Hex()).
+				Message("stopping a downloader")
+			delete(d.downloaders, publicKey)
+			cancelFn()
+		}
+	}
+
+	for _, publicKey := range publicKeysSet.List() {
+		if _, ok := d.downloaders[publicKey]; !ok {
+			d.logger.
+				Trace().
+				WithField("publicKey", publicKey.Hex()).
+				Message("creating a downloader")
+
+			ctx, cancel := context.WithCancel(ctx)
+			go d.downloadMessages(ctx, domain.NewFilter(
+				nil,
+				nil,
+				[]domain.PublicKey{publicKey},
+				d.downloadSince(),
+			))
+			d.downloaders[publicKey] = cancel
+		}
+	}
+
+	return nil
+}
 
 func (d *RelayDownloader) downloadMessages(ctx context.Context, filter domain.Filter) {
 	if err := d.downloadMessagesWithErr(ctx, filter); err != nil {
@@ -376,14 +355,22 @@ func (m *DatabaseRelaySource) GetRelays(ctx context.Context) ([]domain.RelayAddr
 }
 
 type RelayDownloaderFactory struct {
+	publicKeySource        PublicKeySource
 	relayConnections       RelayConnections
 	receivedEventPublisher ReceivedEventPublisher
 	logger                 logging.Logger
 	metrics                Metrics
 }
 
-func NewRelayDownloaderFactory(relayConnections RelayConnections, receivedEventPublisher ReceivedEventPublisher, logger logging.Logger, metrics Metrics) *RelayDownloaderFactory {
+func NewRelayDownloaderFactory(
+	publicKeySource PublicKeySource,
+	relayConnections RelayConnections,
+	receivedEventPublisher ReceivedEventPublisher,
+	logger logging.Logger,
+	metrics Metrics,
+) *RelayDownloaderFactory {
 	return &RelayDownloaderFactory{
+		publicKeySource:        publicKeySource,
 		relayConnections:       relayConnections,
 		receivedEventPublisher: receivedEventPublisher,
 		logger:                 logger.New("relayDownloaderFactory"),
@@ -396,7 +383,48 @@ func (r *RelayDownloaderFactory) CreateRelayDownloader(address domain.RelayAddre
 		address,
 		r.receivedEventPublisher,
 		r.relayConnections,
+		r.publicKeySource,
 		r.logger,
 		r.metrics,
 	), nil
+}
+
+type DatabasePublicKeySource struct {
+	transactionProvider TransactionProvider
+	logger              logging.Logger
+}
+
+func NewDatabasePublicKeySource(transactionProvider TransactionProvider, logger logging.Logger) *DatabasePublicKeySource {
+	return &DatabasePublicKeySource{
+		transactionProvider: transactionProvider,
+		logger:              logger.New("databasePublicKeySource"),
+	}
+}
+
+func (d *DatabasePublicKeySource) GetPublicKeys(ctx context.Context) ([]domain.PublicKey, error) {
+	result := internal.NewEmptySet[domain.PublicKey]()
+
+	if err := d.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
+		publicKeysToMonitor, err := adapters.PublicKeysToMonitor.List(ctx)
+		if err != nil {
+			return errors.Wrap(err, "error getting public keys to monitor")
+		}
+
+		for _, v := range publicKeysToMonitor {
+			result.Put(v.PublicKey())
+
+			followees, err := adapters.Contacts.GetFollowees(ctx, v.PublicKey())
+			if err != nil {
+				return errors.Wrapf(err, "error getting followees of '%s", v.PublicKey().Hex())
+			}
+
+			result.PutMany(followees)
+		}
+
+		return nil
+	}); err != nil {
+		return nil, errors.Wrap(err, "transaction error")
+	}
+
+	return result.List(), nil
 }

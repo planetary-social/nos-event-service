@@ -72,7 +72,6 @@ func buildTransactionSqliteAdapters(*sql.DB, *sql.Tx, buildTransactionSqliteAdap
 
 		sqliteTxAdaptersSet,
 		sqliteTxPubsubSet,
-		sqlitePubsubSet,
 	)
 	return app.Adapters{}, nil
 }
@@ -84,7 +83,6 @@ func buildTestTransactionSqliteAdapters(*sql.DB, *sql.Tx, buildTransactionSqlite
 
 		sqliteTxAdaptersSet,
 		sqliteTxPubsubSet,
-		sqlitePubsubSet,
 	)
 	return sqlite.TestAdapters{}, nil
 }
@@ -101,6 +99,9 @@ var downloaderSet = wire.NewSet(
 
 	relays.NewRelayConnections,
 	wire.Bind(new(app.RelayConnections), new(*relays.RelayConnections)),
+
+	app.NewDatabasePublicKeySource,
+	wire.Bind(new(app.PublicKeySource), new(*app.DatabasePublicKeySource)),
 )
 
 var domainSet = wire.NewSet(
