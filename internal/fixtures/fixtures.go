@@ -15,10 +15,6 @@ import (
 	"github.com/planetary-social/nos-event-service/service/domain"
 )
 
-func somePrivateKeyHex() string {
-	return nostr.GeneratePrivateKey()
-}
-
 func SomePublicKey() domain.PublicKey {
 	p, _ := SomeKeyPair()
 	return p
@@ -36,33 +32,6 @@ func SomeKeyPair() (publicKey domain.PublicKey, secretKeyHex string) {
 		panic(err)
 	}
 	return v, hex
-}
-
-func SomeRelayAddress() domain.RelayAddress {
-	protocol := internal.RandomElement([]string{"ws", "wss"})
-	address := fmt.Sprintf("%s://%s", protocol, SomeString())
-
-	v, err := domain.NewRelayAddress(address)
-	if err != nil {
-		panic(err)
-	}
-	return v
-}
-
-func SomeString() string {
-	return randSeq(10)
-}
-
-func SomeHexBytesOfLen(l int) string {
-	b := make([]byte, l)
-	n, err := cryptorand.Read(b)
-	if n != len(b) {
-		panic("short read")
-	}
-	if err != nil {
-		panic(err)
-	}
-	return hex.EncodeToString(b)
 }
 
 func SomeError() error {
@@ -169,6 +138,22 @@ func TestLogger(t testing.TB) logging.Logger {
 	return logging.NewSystemLogger(logging.NewTestingLoggingSystem(t), "test")
 }
 
+func SomeString() string {
+	return randSeq(10)
+}
+
+func SomeHexBytesOfLen(l int) string {
+	b := make([]byte, l)
+	n, err := cryptorand.Read(b)
+	if n != len(b) {
+		panic("short read")
+	}
+	if err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b)
+}
+
 func SomeBytesOfLen(l int) []byte {
 	b := make([]byte, l)
 	n, err := cryptorand.Read(b)
@@ -179,6 +164,17 @@ func SomeBytesOfLen(l int) []byte {
 		panic(err)
 	}
 	return b
+}
+
+func SomeRelayAddress() domain.RelayAddress {
+	protocol := internal.RandomElement([]string{"ws", "wss"})
+	address := fmt.Sprintf("%s://%s", protocol, SomeString())
+
+	v, err := domain.NewRelayAddress(address)
+	if err != nil {
+		panic(err)
+	}
+	return v
 }
 
 func SomeMaybeRelayAddress() domain.MaybeRelayAddress {
@@ -193,4 +189,8 @@ func randSeq(n int) string {
 		b[i] = letters[rand.Intn(len(letters))]
 	}
 	return string(b)
+}
+
+func somePrivateKeyHex() string {
+	return nostr.GeneratePrivateKey()
 }
