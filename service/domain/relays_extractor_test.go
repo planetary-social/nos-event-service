@@ -14,17 +14,13 @@ func TestRelaysExtractor(t *testing.T) {
 		Name string
 
 		Kind    domain.EventKind
-		Tags    domain.EventTag
 		Content string
 
 		Result []domain.MaybeRelayAddress
 	}{
 		{
-			Name: "contacts_with_map",
-			Kind: domain.EventKindContacts,
-			//Tags: domain.NewEventTag([]string{
-			//	"p, "
-			//}),
+			Name:    "contacts_with_map",
+			Kind:    domain.EventKindContacts,
 			Content: `{"wss://relay.damus.io":{"read":true,"write":true},"wss://nostr.bitcoiner.social":{"read":true,"write":true}}`,
 
 			Result: []domain.MaybeRelayAddress{
@@ -33,11 +29,8 @@ func TestRelaysExtractor(t *testing.T) {
 			},
 		},
 		{
-			Name: "contacts_with_slice",
-			Kind: domain.EventKindContacts,
-			//Tags: domain.NewEventTag([]string{
-			//	"p, "
-			//}),
+			Name:    "contacts_with_slice",
+			Kind:    domain.EventKindContacts,
 			Content: `[["wss://nostr.wine",{"write":true,"read":true}],["wss://relay.current.fyi",{"read":true,"write":true}]]`,
 
 			Result: []domain.MaybeRelayAddress{
