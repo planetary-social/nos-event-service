@@ -49,20 +49,6 @@ var adaptersSet = wire.NewSet(
 	prometheus.NewPrometheus,
 	wire.Bind(new(app.Metrics), new(*prometheus.Prometheus)),
 	wire.Bind(new(relays.Metrics), new(*prometheus.Prometheus)),
-
-	//adapters.NewIDGenerator,
-	//wire.Bind(new(app.SessionIDGenerator), new(*adapters.IDGenerator)),
-	//wire.Bind(new(app.AccountIDGenerator), new(*adapters.IDGenerator)),
-	//
-	//adapters.NewRelaySource,
-	//adapters.NewPurplePages,
-	//wire.Bind(new(app.RelaySource), new(*adapters.RelaySource)),
-	//
-	//adapters.NewRelayEventDownloader,
-	//wire.Bind(new(app.RelayEventDownloader), new(*adapters.RelayEventDownloader)),
-	//
-	//adapters.NewTwitterAccountDetailsCache,
-	//wire.Bind(new(app.TwitterAccountDetailsCache), new(*adapters.TwitterAccountDetailsCache)),
 )
 
 func newAdaptersFactoryFn(deps buildTransactionSqliteAdaptersDependencies) sqlite.AdaptersFactoryFn {

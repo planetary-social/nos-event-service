@@ -23,7 +23,6 @@ var sqlitePubsubSet = wire.NewSet(
 	sqlite.NewPubSub,
 
 	sqlite.NewSubscriber,
-	//wire.Bind(new(app.Subscriber), new(*sqlite.Subscriber)),
 )
 
 var sqliteTxPubsubSet = wire.NewSet(
