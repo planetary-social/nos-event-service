@@ -24,6 +24,7 @@ const (
 type RelayConnection struct {
 	address domain.RelayAddress
 	logger  logging.Logger
+	metrics Metrics
 
 	state      RelayConnectionState
 	stateMutex sync.Mutex
@@ -34,10 +35,15 @@ type RelayConnection struct {
 	subscriptionsMutex           sync.Mutex
 }
 
-func NewRelayConnection(address domain.RelayAddress, logger logging.Logger) *RelayConnection {
+func NewRelayConnection(
+	address domain.RelayAddress,
+	logger logging.Logger,
+	metrics Metrics,
+) *RelayConnection {
 	return &RelayConnection{
 		address:                address,
 		logger:                 logger.New(fmt.Sprintf("relayConnection(%s)", address.String())),
+		metrics:                metrics,
 		state:                  RelayConnectionStateInitializing,
 		subscriptions:          make(map[transport2.SubscriptionID]subscription),
 		subscriptionsUpdatedCh: make(chan struct{}),
@@ -187,9 +193,10 @@ func (r *RelayConnection) run(ctx context.Context) error {
 	}
 }
 
-func (r *RelayConnection) handleMessage(messageBytes []byte) error {
+func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 	envelope := nostr.ParseMessage(messageBytes)
 	if envelope == nil {
+		defer r.metrics.ReportMessageReceived(r.address, MessageTypeUnknown, &err)
 		r.logger.Error().
 			WithField("messageBytesAsHex", hex.EncodeToString(messageBytes)).
 			Message("error parsing an incoming message")
@@ -198,18 +205,22 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) error {
 
 	switch v := envelope.(type) {
 	case *nostr.EOSEEnvelope:
+		defer r.metrics.ReportMessageReceived(r.address, MessageTypeEOSE, &err)
 		r.logger.Trace().
 			WithField("subscription", string(*v)).
 			Message("received EOSE")
+
 		subscriptionID, err := transport2.NewSubscriptionID(string(*v))
 		if err != nil {
 			return errors.Wrapf(err, "error creating subscription id from '%s'", string(*v))
 		}
 		r.passValueToChannel(subscriptionID, NewEventOrEndOfSavedEventsWithEOSE())
 	case *nostr.EventEnvelope:
+		defer r.metrics.ReportMessageReceived(r.address, MessageTypeEvent, &err)
 		r.logger.Trace().
 			WithField("subscription", *v.SubscriptionID).
 			Message("received event")
+
 		subscriptionID, err := transport2.NewSubscriptionID(*v.SubscriptionID)
 		if err != nil {
 			return errors.Wrapf(err, "error creating subscription id from '%s'", *v.SubscriptionID)
@@ -219,7 +230,13 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) error {
 			return errors.Wrap(err, "error creating an event")
 		}
 		r.passValueToChannel(subscriptionID, NewEventOrEndOfSavedEventsWithEvent(event))
+	case *nostr.NoticeEnvelope:
+		defer r.metrics.ReportMessageReceived(r.address, MessageTypeNotice, &err)
+		r.logger.Debug().
+			WithField("message", string(messageBytes)).
+			Message("received a notice")
 	default:
+		defer r.metrics.ReportMessageReceived(r.address, MessageTypeUnknown, &err)
 		r.logger.Debug().
 			WithField("message", string(messageBytes)).
 			Message("unhandled message")
@@ -319,6 +336,7 @@ func (r *RelayConnection) updateSubs(
 		}
 	}
 
+	r.metrics.ReportNumberOfSubscriptions(r.address, len(r.subscriptions))
 	return nil
 }
 
