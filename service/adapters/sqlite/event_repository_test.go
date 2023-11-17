@@ -6,8 +6,22 @@ import (
 
 	"github.com/planetary-social/nos-event-service/internal/fixtures"
 	"github.com/planetary-social/nos-event-service/service/adapters/sqlite"
+	"github.com/planetary-social/nos-event-service/service/app"
 	"github.com/stretchr/testify/require"
 )
+
+func TestEventRepository_GetReturnsPredefinedError(t *testing.T) {
+	ctx := fixtures.TestContext(t)
+	adapters := NewTestAdapters(ctx, t)
+
+	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		_, err := adapters.EventRepository.Get(ctx, fixtures.SomeEventID())
+		require.ErrorIs(t, err, app.ErrEventNotFound)
+
+		return nil
+	})
+	require.NoError(t, err)
+}
 
 func TestEventRepository_SavingTheSameEventTwiceReturnsNoErrors(t *testing.T) {
 	ctx := fixtures.TestContext(t)

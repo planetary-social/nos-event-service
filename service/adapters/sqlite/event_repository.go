@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/boreq/errors"
+	"github.com/planetary-social/nos-event-service/service/app"
 	"github.com/planetary-social/nos-event-service/service/domain"
 )
 
@@ -49,6 +50,9 @@ func (m *EventRepository) readEvent(result *sql.Row) (domain.Event, error) {
 	var payload []byte
 
 	if err := result.Scan(&payload); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Event{}, app.ErrEventNotFound
+		}
 		return domain.Event{}, errors.Wrap(err, "error reading the row")
 	}
 

@@ -9,9 +9,23 @@ import (
 
 	"github.com/planetary-social/nos-event-service/internal/fixtures"
 	"github.com/planetary-social/nos-event-service/service/adapters/sqlite"
+	"github.com/planetary-social/nos-event-service/service/app"
 	"github.com/planetary-social/nos-event-service/service/domain"
 	"github.com/stretchr/testify/require"
 )
+
+func TestPublicKeysToMonitorRepository_GetReturnsPredefinedError(t *testing.T) {
+	ctx := fixtures.TestContext(t)
+	adapters := NewTestAdapters(ctx, t)
+
+	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		_, err := adapters.PublicKeysToMonitorRepository.Get(ctx, fixtures.SomePublicKey())
+		require.ErrorIs(t, err, app.ErrPublicKeyToMonitorNotFound)
+
+		return nil
+	})
+	require.NoError(t, err)
+}
 
 func TestPublicKeysToMonitorRepository_ListReturnsNoDataWhenRepositoryIsEmpty(t *testing.T) {
 	ctx := fixtures.TestContext(t)
@@ -21,6 +35,33 @@ func TestPublicKeysToMonitorRepository_ListReturnsNoDataWhenRepositoryIsEmpty(t 
 		result, err := adapters.PublicKeysToMonitorRepository.List(ctx)
 		require.NoError(t, err)
 		require.Empty(t, result)
+
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func TestPublicKeysToMonitorRepository_GetReturnsData(t *testing.T) {
+	ctx := fixtures.TestContext(t)
+	adapters := NewTestAdapters(ctx, t)
+
+	publicKey := fixtures.SomePublicKey()
+	publicKeyTime := date(2023, time.November, 1)
+	publicKeyToMonitor := domain.MustNewPublicKeyToMonitor(publicKey, publicKeyTime, publicKeyTime)
+
+	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.PublicKeysToMonitorRepository.Save(ctx, publicKeyToMonitor)
+		require.NoError(t, err)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		result, err := adapters.PublicKeysToMonitorRepository.Get(ctx, publicKey)
+		require.NoError(t, err)
+
+		kindaEqual(t, publicKeyToMonitor, result)
 
 		return nil
 	})

@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/boreq/errors"
 	"github.com/planetary-social/nos-event-service/internal/logging"
@@ -47,11 +46,30 @@ func (h *SaveReceivedEventHandler) Handle(ctx context.Context, cmd SaveReceivedE
 		WithField("event.kind", cmd.event.Kind().Int()).
 		Message("saving received event")
 
-	if !h.shouldBeGloballyDownloaded(cmd.event.Kind()) {
-		return fmt.Errorf("event shouldn't have been downloaded, relay '%s' may be misbehaving", cmd.relay.String())
-	}
-
 	if err := h.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
+		exists, err := h.eventAlreadyExists(ctx, adapters, cmd.event)
+		if err != nil {
+			return errors.Wrap(err, "error checking if event exists")
+		}
+
+		if exists {
+			return nil // we want to avoid publishing internal events for no reason
+		}
+
+		shouldBeDownloaded, err := h.shouldBeDownloaded(ctx, adapters, cmd.event)
+		if err != nil {
+			return errors.Wrap(err, "error checking if event should be downloaded")
+		}
+
+		if !shouldBeDownloaded {
+			h.logger.
+				Debug().
+				WithField("event", cmd.event.Raw()).
+				WithField("address", cmd.relay.String()).
+				Message("event shouldn't have been downloaded, relay may be misbehaving")
+			return nil
+		}
+
 		if err := adapters.Events.Save(ctx, cmd.event); err != nil {
 			return errors.Wrap(err, "error saving the event")
 		}
@@ -66,6 +84,54 @@ func (h *SaveReceivedEventHandler) Handle(ctx context.Context, cmd SaveReceivedE
 	}
 
 	return nil
+}
+
+func (h *SaveReceivedEventHandler) eventAlreadyExists(ctx context.Context, adapters Adapters, event domain.Event) (bool, error) {
+	if _, err := adapters.Events.Get(ctx, event.Id()); err != nil {
+		if errors.Is(err, ErrEventNotFound) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "error checking if event exists")
+	}
+
+	return true, nil
+}
+
+func (h *SaveReceivedEventHandler) shouldBeDownloaded(ctx context.Context, adapters Adapters, event domain.Event) (bool, error) {
+	if h.shouldBeGloballyDownloaded(event.Kind()) {
+		return true, nil
+	}
+
+	shouldBeDirectlyMonitored, err := h.shouldBeDirectlyMonitored(ctx, adapters, event)
+	if err != nil {
+		return false, errors.Wrap(err, "error checking if public key should be directly monitored")
+	}
+
+	if shouldBeDirectlyMonitored {
+		return true, nil
+	}
+
+	isFolloweeOfMonitored, err := adapters.Contacts.IsFolloweeOfMonitoredPublicKey(ctx, event.PubKey())
+	if err != nil {
+		return false, errors.Wrap(err, "error checking if public key is a followee of a monitored key")
+	}
+
+	if isFolloweeOfMonitored {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (h *SaveReceivedEventHandler) shouldBeDirectlyMonitored(ctx context.Context, adapters Adapters, event domain.Event) (bool, error) {
+	if _, err := adapters.PublicKeysToMonitor.Get(ctx, event.PubKey()); err != nil {
+		if errors.Is(err, ErrPublicKeyToMonitorNotFound) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "error checking if public key to monitor exists")
+	}
+
+	return true, nil
 }
 
 func (h *SaveReceivedEventHandler) shouldBeGloballyDownloaded(kind domain.EventKind) bool {
