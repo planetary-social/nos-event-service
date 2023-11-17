@@ -27,6 +27,7 @@ import (
 	"github.com/planetary-social/nos-event-service/service/ports/http"
 	memorypubsub2 "github.com/planetary-social/nos-event-service/service/ports/memorypubsub"
 	"github.com/planetary-social/nos-event-service/service/ports/sqlitepubsub"
+	"github.com/planetary-social/nos-event-service/service/ports/timer"
 )
 
 // Injectors from wire.go:
@@ -61,9 +62,13 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 		return Service{}, nil, err
 	}
 	processSavedEventHandler := app.NewProcessSavedEventHandler(genericTransactionProvider, relaysExtractor, contactsExtractor, externalEventPublisher, logger, prometheusPrometheus)
+	pubSub := sqlite.NewPubSub(db, logger)
+	subscriber := sqlite.NewSubscriber(pubSub, db)
+	updateMetricsHandler := app.NewUpdateMetricsHandler(genericTransactionProvider, subscriber, logger, prometheusPrometheus)
 	application := app.Application{
 		SaveReceivedEvent: saveReceivedEventHandler,
 		ProcessSavedEvent: processSavedEventHandler,
+		UpdateMetrics:     updateMetricsHandler,
 	}
 	server := http.NewServer(configConfig, logger, application, prometheusPrometheus)
 	bootstrapRelaySource := relays.NewBootstrapRelaySource()
@@ -73,9 +78,8 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	relayDownloaderFactory := app.NewRelayDownloaderFactory(relayConnections, receivedEventPubSub, logger, prometheusPrometheus)
 	downloader := app.NewDownloader(bootstrapRelaySource, databaseRelaySource, logger, prometheusPrometheus, relayDownloaderFactory)
 	receivedEventSubscriber := memorypubsub2.NewReceivedEventSubscriber(receivedEventPubSub, saveReceivedEventHandler, logger)
-	pubSub := sqlite.NewPubSub(db, logger)
-	subscriber := sqlite.NewSubscriber(pubSub, db)
 	eventSavedEventSubscriber := sqlitepubsub.NewEventSavedEventSubscriber(processSavedEventHandler, subscriber, logger, prometheusPrometheus)
+	metrics := timer.NewMetrics(application, logger)
 	migrationsStorage, err := sqlite.NewMigrationsStorage(db)
 	if err != nil {
 		cleanup()
@@ -89,7 +93,7 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 		return Service{}, nil, err
 	}
 	loggingMigrationsProgressCallback := adapters.NewLoggingMigrationsProgressCallback(logger)
-	service := NewService(application, server, downloader, receivedEventSubscriber, eventSavedEventSubscriber, runner, migrationsMigrations, loggingMigrationsProgressCallback)
+	service := NewService(application, server, downloader, receivedEventSubscriber, eventSavedEventSubscriber, metrics, runner, migrationsMigrations, loggingMigrationsProgressCallback)
 	return service, func() {
 		cleanup()
 	}, nil

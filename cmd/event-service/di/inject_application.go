@@ -15,4 +15,6 @@ var applicationSet = wire.NewSet(
 
 	app.NewProcessSavedEventHandler,
 	wire.Bind(new(sqlitepubsub.ProcessSavedEventHandler), new(*app.ProcessSavedEventHandler)),
+
+	app.NewUpdateMetricsHandler,
 )

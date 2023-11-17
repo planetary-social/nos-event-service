@@ -141,10 +141,6 @@ func (p *Prometheus) StartApplicationCall(handlerName string) app.ApplicationCal
 	return NewApplicationCall(p, handlerName, p.logger)
 }
 
-func (p *Prometheus) ReportSubscriptionQueueLength(topic string, n int) {
-	p.subscriptionQueueLengthGauge.With(prometheus.Labels{labelTopic: topic}).Set(float64(n))
-}
-
 func (p *Prometheus) ReportNumberOfRelayDownloaders(n int) {
 	p.relayDownloadersGauge.Set(float64(n))
 }
@@ -163,6 +159,10 @@ func (p *Prometheus) ReportRelayConnectionsState(m map[domain.RelayAddress]relay
 
 func (p *Prometheus) ReportReceivedEvent(address domain.RelayAddress) {
 	p.receivedEventsCounter.With(prometheus.Labels{labelAddress: address.String()}).Inc()
+}
+
+func (p *Prometheus) ReportQueueLength(topic string, n int) {
+	p.subscriptionQueueLengthGauge.With(prometheus.Labels{labelTopic: topic}).Set(float64(n))
 }
 
 func (p *Prometheus) Registry() *prometheus.Registry {

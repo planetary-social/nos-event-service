@@ -51,6 +51,7 @@ type ExternalEventPublisher interface {
 type Application struct {
 	SaveReceivedEvent *SaveReceivedEventHandler
 	ProcessSavedEvent *ProcessSavedEventHandler
+	UpdateMetrics     *UpdateMetricsHandler
 }
 
 type ReceivedEvent struct {
@@ -78,6 +79,7 @@ type Metrics interface {
 	StartApplicationCall(handlerName string) ApplicationCall
 	ReportNumberOfRelayDownloaders(n int)
 	ReportReceivedEvent(address domain.RelayAddress)
+	ReportQueueLength(topic string, n int)
 }
 
 type ApplicationCall interface {
@@ -95,4 +97,8 @@ type ContactsExtractor interface {
 	// that normally contains contacts. This is to distinguish between events
 	// that contain zero contacts and events that don't ever contain contacts.
 	Extract(event domain.Event) ([]domain.PublicKey, error)
+}
+
+type Subscriber interface {
+	EventSavedQueueLength(ctx context.Context) (int, error)
 }

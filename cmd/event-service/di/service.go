@@ -10,6 +10,7 @@ import (
 	"github.com/planetary-social/nos-event-service/service/ports/http"
 	"github.com/planetary-social/nos-event-service/service/ports/memorypubsub"
 	"github.com/planetary-social/nos-event-service/service/ports/sqlitepubsub"
+	"github.com/planetary-social/nos-event-service/service/ports/timer"
 )
 
 type Service struct {
@@ -18,6 +19,7 @@ type Service struct {
 	downloader                 *app.Downloader
 	receivedEventSubscriber    *memorypubsub.ReceivedEventSubscriber
 	eventSavedEventSubscriber  *sqlitepubsub.EventSavedEventSubscriber
+	metricsTimer               *timer.Metrics
 	migrationsRunner           *migrations.Runner
 	migrations                 migrations.Migrations
 	migrationsProgressCallback migrations.ProgressCallback
@@ -29,6 +31,7 @@ func NewService(
 	downloader *app.Downloader,
 	receivedEventSubscriber *memorypubsub.ReceivedEventSubscriber,
 	eventSavedEventSubscriber *sqlitepubsub.EventSavedEventSubscriber,
+	metricsTimer *timer.Metrics,
 	migrationsRunner *migrations.Runner,
 	migrations migrations.Migrations,
 	migrationsProgressCallback migrations.ProgressCallback,
@@ -39,6 +42,7 @@ func NewService(
 		downloader:                 downloader,
 		receivedEventSubscriber:    receivedEventSubscriber,
 		eventSavedEventSubscriber:  eventSavedEventSubscriber,
+		metricsTimer:               metricsTimer,
 		migrationsRunner:           migrationsRunner,
 		migrations:                 migrations,
 		migrationsProgressCallback: migrationsProgressCallback,
@@ -78,6 +82,11 @@ func (s Service) Run(ctx context.Context) error {
 	runners++
 	go func() {
 		errCh <- errors.Wrap(s.eventSavedEventSubscriber.Run(ctx), "event saved subscriber error")
+	}()
+
+	runners++
+	go func() {
+		errCh <- errors.Wrap(s.metricsTimer.Run(ctx), "metrics timer error")
 	}()
 
 	var err error
