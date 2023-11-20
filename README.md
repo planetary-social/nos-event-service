@@ -58,6 +58,13 @@ Go-related metrics are available. We also have custom metrics:
 
 - `application_handler_calls_total`
 - `application_handler_calls_duration`
+- `version`
+- `subscription_queue_length`
+- `relay_downloader_gauge`
+- `relay_connection_state_gauge`
+- `received_events_counter`
+- `relay_connection_subscriptions_gauge`
+- `relay_connection_received_messages_counter`
 
 See `service/adapters/prometheus`.
 

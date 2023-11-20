@@ -61,11 +61,12 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		},
 		[]string{labelHandlerName, labelResult},
 	)
-	relayDownloadersGauge := prometheus.NewGauge(
+	versionGague := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "relay_downloader_gauge",
-			Help: "Number of running relay downloaders.",
+			Name: "version",
+			Help: "This metric exists just to put a commit label on it.",
 		},
+		[]string{labelVcsRevision, labelVcsTime, labelGo},
 	)
 	subscriptionQueueLengthGauge := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -74,12 +75,11 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		},
 		[]string{labelTopic},
 	)
-	versionGague := prometheus.NewGaugeVec(
+	relayDownloadersGauge := prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "version",
-			Help: "This metric exists just to put a commit label on it.",
+			Name: "relay_downloader_gauge",
+			Help: "Number of running relay downloaders.",
 		},
-		[]string{labelVcsRevision, labelVcsTime, labelGo},
 	)
 	relayConnectionStateGauge := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -114,9 +114,9 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 	for _, v := range []prometheus.Collector{
 		applicationHandlerCallsCounter,
 		applicationHandlerCallDurationHistogram,
-		relayDownloadersGauge,
-		subscriptionQueueLengthGauge,
 		versionGague,
+		subscriptionQueueLengthGauge,
+		relayDownloadersGauge,
 		relayConnectionStateGauge,
 		receivedEventsCounter,
 		relayConnectionSubscriptionsGauge,
