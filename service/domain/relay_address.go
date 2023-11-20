@@ -11,6 +11,9 @@ type RelayAddress struct {
 }
 
 func NewRelayAddress(s string) (RelayAddress, error) {
+	s = strings.TrimSpace(s)
+	s = strings.TrimRight(s, "/")
+
 	if !strings.HasPrefix(s, "ws://") && !strings.HasPrefix(s, "wss://") {
 		return RelayAddress{}, errors.New("invalid protocol")
 	}
