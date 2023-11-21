@@ -66,6 +66,7 @@ Go-related metrics are available. We also have custom metrics:
 - `relay_connection_subscriptions_gauge`
 - `relay_connection_received_messages_counter`
 - `relay_connection_reconnections_counter`
+- `stored_relay_addresses_gauge`
 
 See `service/adapters/prometheus`.
 
