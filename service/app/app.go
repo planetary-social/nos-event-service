@@ -35,6 +35,7 @@ type EventRepository interface {
 type RelayRepository interface {
 	Save(ctx context.Context, eventID domain.EventId, relayAddress domain.MaybeRelayAddress) error
 	List(ctx context.Context) ([]domain.MaybeRelayAddress, error)
+	Count(ctx context.Context) (int, error)
 }
 
 type ContactRepository interface {
@@ -94,6 +95,7 @@ type Metrics interface {
 	ReportNumberOfRelayDownloaders(n int)
 	ReportReceivedEvent(address domain.RelayAddress)
 	ReportQueueLength(topic string, n int)
+	ReportNumberOfStoredRelayAddresses(n int)
 }
 
 type ApplicationCall interface {

@@ -37,5 +37,17 @@ func (h *UpdateMetricsHandler) Handle(ctx context.Context) (err error) {
 	}
 	h.metrics.ReportQueueLength("eventSaved", n)
 
+	if err := h.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
+		n, err := adapters.Relays.Count(ctx)
+		if err != nil {
+			return errors.Wrap(err, "error counting relay addresses")
+		}
+		h.metrics.ReportNumberOfStoredRelayAddresses(n)
+
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "transaction error")
+	}
+
 	return nil
 }
