@@ -28,6 +28,7 @@ var (
 	MessageTypeNotice  = MessageType{"notice"}
 	MessageTypeEOSE    = MessageType{"eose"}
 	MessageTypeEvent   = MessageType{"event"}
+	MessageTypeAuth    = MessageType{"auth"}
 	MessageTypeUnknown = MessageType{"unknown"}
 )
 
