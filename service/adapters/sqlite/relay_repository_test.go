@@ -144,3 +144,63 @@ func TestRelayRepository_SavingSameDataTwiceDoesNotCreateDuplicates(t *testing.T
 	})
 	require.NoError(t, err)
 }
+
+func TestRelayRepository_CountCountsSavedAddresses(t *testing.T) {
+	ctx := fixtures.TestContext(t)
+	adapters := NewTestAdapters(ctx, t)
+
+	event := fixtures.SomeEvent()
+	address1 := fixtures.SomeMaybeRelayAddress()
+	address2 := fixtures.SomeMaybeRelayAddress()
+
+	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.EventRepository.Save(ctx, event)
+		require.NoError(t, err)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		n, err := adapters.RelayRepository.Count(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 0, n)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.RelayRepository.Save(ctx, event.Id(), address1)
+		require.NoError(t, err)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		n, err := adapters.RelayRepository.Count(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 1, n)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.RelayRepository.Save(ctx, event.Id(), address2)
+		require.NoError(t, err)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		n, err := adapters.RelayRepository.Count(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 2, n)
+
+		return nil
+	})
+	require.NoError(t, err)
+}

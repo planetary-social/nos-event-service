@@ -76,3 +76,14 @@ func (r *RelayRepository) List(ctx context.Context) ([]domain.MaybeRelayAddress,
 
 	return result, nil
 }
+
+func (r *RelayRepository) Count(ctx context.Context) (int, error) {
+	row := r.tx.QueryRow(`SELECT COUNT(*) FROM relays`)
+
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return 0, errors.Wrap(err, "error scanning")
+	}
+
+	return count, nil
+}

@@ -41,6 +41,7 @@ type Prometheus struct {
 	relayConnectionSubscriptionsGauge       *prometheus.GaugeVec
 	relayConnectionReceivedMessagesCounter  *prometheus.CounterVec
 	relayConnectionReconnectionsCounter     *prometheus.CounterVec
+	storedRelayAddressesGauge               prometheus.Gauge
 
 	registry *prometheus.Registry
 
@@ -117,6 +118,12 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		},
 		[]string{labelAddress},
 	)
+	storedRelayAddressesGauge := prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "stored_relay_addresses_gauge",
+			Help: "Number of stored relay addresses.",
+		},
+	)
 
 	reg := prometheus.NewRegistry()
 	for _, v := range []prometheus.Collector{
@@ -130,6 +137,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		relayConnectionSubscriptionsGauge,
 		relayConnectionReceivedMessagesCounter,
 		relayConnectionReconnectionsCounter,
+		storedRelayAddressesGauge,
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		collectors.NewGoCollector(),
 	} {
@@ -162,6 +170,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		relayConnectionSubscriptionsGauge:       relayConnectionSubscriptionsGauge,
 		relayConnectionReceivedMessagesCounter:  relayConnectionReceivedMessagesCounter,
 		relayConnectionReconnectionsCounter:     relayConnectionReconnectionsCounter,
+		storedRelayAddressesGauge:               storedRelayAddressesGauge,
 
 		registry: reg,
 
@@ -214,6 +223,10 @@ func (p *Prometheus) ReportMessageReceived(address domain.RelayAddress, messageT
 
 func (p *Prometheus) ReportRelayReconnection(address domain.RelayAddress) {
 	p.relayConnectionReconnectionsCounter.With(prometheus.Labels{labelAddress: address.String()}).Inc()
+}
+
+func (p *Prometheus) ReportNumberOfStoredRelayAddresses(n int) {
+	p.storedRelayAddressesGauge.Set(float64(n))
 }
 
 func (p *Prometheus) Registry() *prometheus.Registry {
