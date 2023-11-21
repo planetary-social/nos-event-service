@@ -188,7 +188,12 @@ func (r *RelayConnection) run(ctx context.Context) error {
 		}
 
 		if err := r.handleMessage(messageBytes); err != nil {
-			return errors.Wrap(err, "error handling message")
+			r.logger.
+				Error().
+				WithError(err).
+				WithField("message", string(messageBytes)).
+				Message("error handling an incoming message")
+			continue
 		}
 	}
 }
@@ -197,16 +202,14 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 	envelope := nostr.ParseMessage(messageBytes)
 	if envelope == nil {
 		defer r.metrics.ReportMessageReceived(r.address, MessageTypeUnknown, &err)
-		r.logger.Error().
-			WithField("message", string(messageBytes)).
-			Message("error parsing an incoming message")
 		return errors.New("error parsing message, we are never going to find out what error unfortunately due to the design of this library")
 	}
 
 	switch v := envelope.(type) {
 	case *nostr.EOSEEnvelope:
 		defer r.metrics.ReportMessageReceived(r.address, MessageTypeEOSE, &err)
-		r.logger.Trace().
+		r.logger.
+			Trace().
 			WithField("subscription", string(*v)).
 			Message("received EOSE")
 
@@ -215,9 +218,11 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 			return errors.Wrapf(err, "error creating subscription id from '%s'", string(*v))
 		}
 		r.passValueToChannel(subscriptionID, NewEventOrEndOfSavedEventsWithEOSE())
+		return nil
 	case *nostr.EventEnvelope:
 		defer r.metrics.ReportMessageReceived(r.address, MessageTypeEvent, &err)
-		r.logger.Trace().
+		r.logger.
+			Trace().
 			WithField("subscription", *v.SubscriptionID).
 			Message("received event")
 
@@ -225,24 +230,25 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 		if err != nil {
 			return errors.Wrapf(err, "error creating subscription id from '%s'", *v.SubscriptionID)
 		}
+
 		event, err := domain.NewEvent(v.Event)
 		if err != nil {
 			return errors.Wrap(err, "error creating an event")
 		}
+
 		r.passValueToChannel(subscriptionID, NewEventOrEndOfSavedEventsWithEvent(event))
+		return nil
 	case *nostr.NoticeEnvelope:
 		defer r.metrics.ReportMessageReceived(r.address, MessageTypeNotice, &err)
-		r.logger.Debug().
+		r.logger.
+			Debug().
 			WithField("message", string(messageBytes)).
 			Message("received a notice")
+		return nil
 	default:
 		defer r.metrics.ReportMessageReceived(r.address, MessageTypeUnknown, &err)
-		r.logger.Debug().
-			WithField("message", string(messageBytes)).
-			Message("unhandled message")
+		return errors.New("unknown message type")
 	}
-
-	return nil
 }
 
 func (r *RelayConnection) passValueToChannel(id transport2.SubscriptionID, value EventOrEndOfSavedEvents) {
