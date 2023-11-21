@@ -35,12 +35,25 @@ func NewRelayAddressFromMaybeAddress(maybe MaybeRelayAddress) (RelayAddress, err
 }
 
 func (r RelayAddress) IsLoopbackOrPrivate() bool {
-	u, err := url.Parse(r.s)
+	hostWithoutPort, err := r.getHostWithoutPort()
 	if err != nil {
 		return false
 	}
-	ip := net.ParseIP(u.Host)
+	ip := net.ParseIP(hostWithoutPort)
 	return ip.IsLoopback() || ip.IsPrivate()
+}
+
+func (r RelayAddress) getHostWithoutPort() (string, error) {
+	u, err := url.Parse(r.s)
+	if err != nil {
+		return "", errors.Wrap(err, "url parse error")
+	}
+
+	hostWithoutPort, _, err := net.SplitHostPort(u.Host)
+	if err != nil {
+		return u.Host, nil
+	}
+	return hostWithoutPort, nil
 }
 
 func (r RelayAddress) String() string {
