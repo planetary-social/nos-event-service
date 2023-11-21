@@ -51,3 +51,34 @@ func TestRelayAddress(t *testing.T) {
 		})
 	}
 }
+
+func TestRelayAddress_IsLocal(t *testing.T) {
+	testCases := []struct {
+		Input  string
+		Result bool
+	}{
+		{
+			Input:  "ws://127.0.0.1",
+			Result: true,
+		},
+		{
+			Input:  "ws://192.168.0.10",
+			Result: true,
+		},
+		{
+			Input:  "ws://1.2.3.4",
+			Result: false,
+		},
+		{
+			Input:  "ws://example.com",
+			Result: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.Input, func(t *testing.T) {
+			address := MustNewRelayAddress(testCase.Input)
+			require.Equal(t, testCase.Result, address.IsLoopbackOrPrivate())
+		})
+	}
+}
