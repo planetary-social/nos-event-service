@@ -338,6 +338,11 @@ func (m *DatabaseRelaySource) GetRelays(ctx context.Context) ([]domain.RelayAddr
 				Message("address is invalid")
 			continue
 		}
+
+		if address.IsLoopbackOrPrivate() {
+			continue
+		}
+
 		result = append(result, address)
 	}
 
