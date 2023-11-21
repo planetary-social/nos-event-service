@@ -415,7 +415,7 @@ func (t ReadMessageError) Is(target error) bool {
 }
 
 const (
-	ReconnectionBackoff        = 1 * time.Minute
+	ReconnectionBackoff        = 5 * time.Minute
 	MaxDialReconnectionBackoff = 30 * time.Minute
 )
 
