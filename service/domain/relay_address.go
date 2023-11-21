@@ -9,17 +9,27 @@ import (
 )
 
 type RelayAddress struct {
-	s string
+	original string
+	parsed   *url.URL
 }
 
 func NewRelayAddress(s string) (RelayAddress, error) {
 	s = strings.TrimSpace(s)
 	s = strings.TrimRight(s, "/")
 
-	if !strings.HasPrefix(s, "ws://") && !strings.HasPrefix(s, "wss://") {
+	u, err := url.Parse(s)
+	if err != nil {
+		return RelayAddress{}, errors.Wrap(err, "url parse error")
+	}
+
+	if u.Scheme != "ws" && u.Scheme != "wss" {
 		return RelayAddress{}, errors.New("invalid protocol")
 	}
-	return RelayAddress{s: s}, nil
+
+	return RelayAddress{
+		original: s,
+		parsed:   u,
+	}, nil
 }
 
 func MustNewRelayAddress(s string) RelayAddress {
@@ -44,18 +54,13 @@ func (r RelayAddress) IsLoopbackOrPrivate() bool {
 }
 
 func (r RelayAddress) getHostWithoutPort() (string, error) {
-	u, err := url.Parse(r.s)
+	hostWithoutPort, _, err := net.SplitHostPort(r.parsed.Host)
 	if err != nil {
-		return "", errors.Wrap(err, "url parse error")
-	}
-
-	hostWithoutPort, _, err := net.SplitHostPort(u.Host)
-	if err != nil {
-		return u.Host, nil
+		return r.parsed.Host, nil
 	}
 	return hostWithoutPort, nil
 }
 
 func (r RelayAddress) String() string {
-	return r.s
+	return r.original
 }
