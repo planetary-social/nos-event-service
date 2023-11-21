@@ -140,3 +140,11 @@ func TestRelayAddress_IsLocal(t *testing.T) {
 		})
 	}
 }
+
+func TestRelayAddress_Compare(t *testing.T) {
+	a := MustNewRelayAddress("wss://example1.com")
+	b := MustNewRelayAddress("wss://example1.com")
+	c := MustNewRelayAddress("wss://example2.com")
+	require.True(t, a == b)
+	require.True(t, a != c)
+}

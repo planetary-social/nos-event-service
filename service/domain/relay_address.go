@@ -10,7 +10,6 @@ import (
 
 type RelayAddress struct {
 	original string
-	parsed   *url.URL
 }
 
 func NewRelayAddress(s string) (RelayAddress, error) {
@@ -28,7 +27,6 @@ func NewRelayAddress(s string) (RelayAddress, error) {
 
 	return RelayAddress{
 		original: s,
-		parsed:   u,
 	}, nil
 }
 
@@ -45,20 +43,22 @@ func NewRelayAddressFromMaybeAddress(maybe MaybeRelayAddress) (RelayAddress, err
 }
 
 func (r RelayAddress) IsLoopbackOrPrivate() bool {
-	hostWithoutPort, err := r.getHostWithoutPort()
-	if err != nil {
-		return false
-	}
+	hostWithoutPort := r.getHostWithoutPort()
 	ip := net.ParseIP(hostWithoutPort)
 	return ip.IsLoopback() || ip.IsPrivate()
 }
 
-func (r RelayAddress) getHostWithoutPort() (string, error) {
-	hostWithoutPort, _, err := net.SplitHostPort(r.parsed.Host)
+func (r RelayAddress) getHostWithoutPort() string {
+	u, err := url.Parse(r.original)
 	if err != nil {
-		return r.parsed.Host, nil
+		panic(err) // checked in constructor
 	}
-	return hostWithoutPort, nil
+
+	hostWithoutPort, _, err := net.SplitHostPort(u.Host)
+	if err != nil {
+		return u.Host
+	}
+	return hostWithoutPort
 }
 
 func (r RelayAddress) String() string {
