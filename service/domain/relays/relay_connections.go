@@ -13,6 +13,7 @@ type Metrics interface {
 	ReportRelayConnectionsState(m map[domain.RelayAddress]RelayConnectionState)
 	ReportNumberOfSubscriptions(address domain.RelayAddress, n int)
 	ReportMessageReceived(address domain.RelayAddress, messageType MessageType, err *error)
+	ReportRelayReconnection(address domain.RelayAddress)
 }
 
 type MessageType struct {

@@ -154,6 +154,7 @@ func (r *RelayConnection) run(ctx context.Context) error {
 	defer r.setState(RelayConnectionStateDisconnected)
 
 	r.logger.Trace().Message("connecting")
+	r.metrics.ReportRelayReconnection(r.address)
 
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, r.address.String(), nil)
 	if err != nil {
