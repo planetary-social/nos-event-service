@@ -40,6 +40,7 @@ type Prometheus struct {
 	receivedEventsCounter                   *prometheus.CounterVec
 	relayConnectionSubscriptionsGauge       *prometheus.GaugeVec
 	relayConnectionReceivedMessagesCounter  *prometheus.CounterVec
+	relayConnectionReconnectionsCounter     *prometheus.CounterVec
 
 	registry *prometheus.Registry
 
@@ -109,6 +110,13 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		},
 		[]string{labelAddress, labelMessageType, labelResult},
 	)
+	relayConnectionReconnectionsCounter := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "relay_connection_reconnections_counter",
+			Help: "Number of reconnections to a relay.",
+		},
+		[]string{labelAddress},
+	)
 
 	reg := prometheus.NewRegistry()
 	for _, v := range []prometheus.Collector{
@@ -121,6 +129,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		receivedEventsCounter,
 		relayConnectionSubscriptionsGauge,
 		relayConnectionReceivedMessagesCounter,
+		relayConnectionReconnectionsCounter,
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		collectors.NewGoCollector(),
 	} {
@@ -152,6 +161,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		receivedEventsCounter:                   receivedEventsCounter,
 		relayConnectionSubscriptionsGauge:       relayConnectionSubscriptionsGauge,
 		relayConnectionReceivedMessagesCounter:  relayConnectionReceivedMessagesCounter,
+		relayConnectionReconnectionsCounter:     relayConnectionReconnectionsCounter,
 
 		registry: reg,
 
@@ -200,6 +210,10 @@ func (p *Prometheus) ReportMessageReceived(address domain.RelayAddress, messageT
 	}
 	setResultLabel(labels, err)
 	p.relayConnectionReceivedMessagesCounter.With(labels).Inc()
+}
+
+func (p *Prometheus) ReportRelayReconnection(address domain.RelayAddress) {
+	p.relayConnectionReconnectionsCounter.With(prometheus.Labels{labelAddress: address.String()}).Inc()
 }
 
 func (p *Prometheus) Registry() *prometheus.Registry {
