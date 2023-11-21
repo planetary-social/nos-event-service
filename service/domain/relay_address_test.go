@@ -62,7 +62,23 @@ func TestRelayAddress_IsLocal(t *testing.T) {
 			Result: true,
 		},
 		{
+			Input:  "ws://127.0.0.1:1234",
+			Result: true,
+		},
+		{
+			Input:  "ws://127.0.0.1:1234/path",
+			Result: true,
+		},
+		{
 			Input:  "ws://192.168.0.10",
+			Result: true,
+		},
+		{
+			Input:  "ws://192.168.0.10:1234",
+			Result: true,
+		},
+		{
+			Input:  "ws://192.168.0.10:1234/path",
 			Result: true,
 		},
 		{
@@ -70,7 +86,23 @@ func TestRelayAddress_IsLocal(t *testing.T) {
 			Result: false,
 		},
 		{
+			Input:  "ws://1.2.3.4:1234",
+			Result: false,
+		},
+		{
+			Input:  "ws://1.2.3.4:1234/path",
+			Result: false,
+		},
+		{
 			Input:  "ws://example.com",
+			Result: false,
+		},
+		{
+			Input:  "ws://example.com:1234",
+			Result: false,
+		},
+		{
+			Input:  "ws://example.com:1234/path",
 			Result: false,
 		},
 	}
