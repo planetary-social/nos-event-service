@@ -220,7 +220,7 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 		r.logger.
 			Trace().
 			WithField("subscription", string(*v)).
-			Message("received EOSE")
+			Message("received a message (EOSE)")
 
 		subscriptionID, err := transport.NewSubscriptionID(string(*v))
 		if err != nil {
@@ -233,7 +233,7 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 		r.logger.
 			Trace().
 			WithField("subscription", *v.SubscriptionID).
-			Message("received event")
+			Message("received a message (event)")
 
 		subscriptionID, err := transport.NewSubscriptionID(*v.SubscriptionID)
 		if err != nil {
@@ -252,7 +252,14 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 		r.logger.
 			Debug().
 			WithField("message", string(messageBytes)).
-			Message("received a notice")
+			Message("received a message (notice)")
+		return nil
+	case *nostr.AuthEnvelope:
+		defer r.metrics.ReportMessageReceived(r.address, MessageTypeAuth, &err)
+		r.logger.
+			Debug().
+			WithField("message", string(messageBytes)).
+			Message("received a message (auth)")
 		return nil
 	default:
 		defer r.metrics.ReportMessageReceived(r.address, MessageTypeUnknown, &err)
