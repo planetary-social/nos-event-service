@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	downloadEventsFromLast = 24 * time.Hour
-	storeMetricsEvery      = 30 * time.Second
+	downloadEventsFromLast = 1 * time.Hour
+	storeMetricsEvery      = 1 * time.Minute
 
 	refreshKnownRelaysEvery     = 1 * time.Minute
 	refreshKnownPublicKeysEvery = 1 * time.Minute
