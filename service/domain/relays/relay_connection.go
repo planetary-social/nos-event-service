@@ -3,6 +3,7 @@ package relays
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -13,22 +14,23 @@ import (
 	"github.com/planetary-social/nos-event-service/internal"
 	"github.com/planetary-social/nos-event-service/internal/logging"
 	"github.com/planetary-social/nos-event-service/service/domain"
-	transport2 "github.com/planetary-social/nos-event-service/service/domain/relays/transport"
+	"github.com/planetary-social/nos-event-service/service/domain/relays/transport"
 )
 
-const (
-	reconnectAfter = 1 * time.Minute
-)
+type BackoffManager interface {
+	GetReconnectionBackoff(err error) time.Duration
+}
 
 type RelayConnection struct {
-	address domain.RelayAddress
-	logger  logging.Logger
-	metrics Metrics
+	address        domain.RelayAddress
+	logger         logging.Logger
+	metrics        Metrics
+	backoffManager BackoffManager
 
 	state      RelayConnectionState
 	stateMutex sync.Mutex
 
-	subscriptions                map[transport2.SubscriptionID]subscription
+	subscriptions                map[transport.SubscriptionID]subscription
 	subscriptionsUpdatedCh       chan struct{}
 	subscriptionsUpdatedChClosed bool
 	subscriptionsMutex           sync.Mutex
@@ -43,29 +45,35 @@ func NewRelayConnection(
 		address:                address,
 		logger:                 logger.New(fmt.Sprintf("relayConnection(%s)", address.String())),
 		metrics:                metrics,
+		backoffManager:         NewDefaultBackoffManager(),
 		state:                  RelayConnectionStateInitializing,
-		subscriptions:          make(map[transport2.SubscriptionID]subscription),
+		subscriptions:          make(map[transport.SubscriptionID]subscription),
 		subscriptionsUpdatedCh: make(chan struct{}),
 	}
 }
 
 func (r *RelayConnection) Run(ctx context.Context) {
 	for {
-		if err := r.run(ctx); err != nil {
-			l := r.logger.Error()
-			if r.errorIsCommonAndShouldNotBeLoggedOnErrorLevel(err) {
-				l = r.logger.Debug()
-			}
-			l.WithError(err).Message("encountered an error")
+		err := r.run(ctx)
+		if err != nil {
+			r.logRunErr(err)
 		}
 
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(reconnectAfter):
+		case <-time.After(r.backoffManager.GetReconnectionBackoff(err)):
 			continue
 		}
 	}
+}
+
+func (r *RelayConnection) logRunErr(err error) {
+	l := r.logger.Error()
+	if r.errorIsCommonAndShouldNotBeLoggedOnErrorLevel(err) {
+		l = r.logger.Debug()
+	}
+	l.WithError(err).Message("encountered an error")
 }
 
 func (r *RelayConnection) errorIsCommonAndShouldNotBeLoggedOnErrorLevel(err error) bool {
@@ -85,7 +93,7 @@ func (r *RelayConnection) GetEvents(ctx context.Context, filter domain.Filter) (
 	defer r.subscriptionsMutex.Unlock()
 
 	ch := make(chan EventOrEndOfSavedEvents)
-	id, err := transport2.NewSubscriptionID(ulid.Make().String())
+	id, err := transport.NewSubscriptionID(ulid.Make().String())
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating a subscription id")
 	}
@@ -213,7 +221,7 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 			WithField("subscription", string(*v)).
 			Message("received EOSE")
 
-		subscriptionID, err := transport2.NewSubscriptionID(string(*v))
+		subscriptionID, err := transport.NewSubscriptionID(string(*v))
 		if err != nil {
 			return errors.Wrapf(err, "error creating subscription id from '%s'", string(*v))
 		}
@@ -226,7 +234,7 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 			WithField("subscription", *v.SubscriptionID).
 			Message("received event")
 
-		subscriptionID, err := transport2.NewSubscriptionID(*v.SubscriptionID)
+		subscriptionID, err := transport.NewSubscriptionID(*v.SubscriptionID)
 		if err != nil {
 			return errors.Wrapf(err, "error creating subscription id from '%s'", *v.SubscriptionID)
 		}
@@ -251,7 +259,7 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 	}
 }
 
-func (r *RelayConnection) passValueToChannel(id transport2.SubscriptionID, value EventOrEndOfSavedEvents) {
+func (r *RelayConnection) passValueToChannel(id transport.SubscriptionID, value EventOrEndOfSavedEvents) {
 	r.subscriptionsMutex.Lock()
 	defer r.subscriptionsMutex.Unlock()
 
@@ -275,7 +283,7 @@ func (r *RelayConnection) manageSubs(
 ) error {
 	defer conn.Close()
 
-	activeSubscriptions := internal.NewEmptySet[transport2.SubscriptionID]()
+	activeSubscriptions := internal.NewEmptySet[transport.SubscriptionID]()
 
 	for {
 		if err := r.updateSubs(conn, activeSubscriptions); err != nil {
@@ -293,7 +301,7 @@ func (r *RelayConnection) manageSubs(
 
 func (r *RelayConnection) updateSubs(
 	conn *websocket.Conn,
-	activeSubscriptions *internal.Set[transport2.SubscriptionID],
+	activeSubscriptions *internal.Set[transport.SubscriptionID],
 ) error {
 	r.subscriptionsMutex.Lock()
 	defer r.subscriptionsMutex.Unlock()
@@ -302,7 +310,7 @@ func (r *RelayConnection) updateSubs(
 
 	for _, subscriptionID := range activeSubscriptions.List() {
 		if _, ok := r.subscriptions[subscriptionID]; !ok {
-			msg := transport2.NewMessageClose(subscriptionID)
+			msg := transport.NewMessageClose(subscriptionID)
 			msgJSON, err := msg.MarshalJSON()
 			if err != nil {
 				return errors.Wrap(err, "marshaling close message failed")
@@ -323,7 +331,7 @@ func (r *RelayConnection) updateSubs(
 
 	for subscriptionID, subscription := range r.subscriptions {
 		if ok := activeSubscriptions.Contains(subscriptionID); !ok {
-			msg := transport2.NewMessageReq(subscription.id, []domain.Filter{subscription.filter})
+			msg := transport.NewMessageReq(subscription.id, []domain.Filter{subscription.filter})
 			msgJSON, err := msg.MarshalJSON()
 			if err != nil {
 				return errors.Wrap(err, "marshaling req message failed")
@@ -350,7 +358,7 @@ type subscription struct {
 	ctx context.Context
 	ch  chan EventOrEndOfSavedEvents
 
-	id     transport2.SubscriptionID
+	id     transport.SubscriptionID
 	filter domain.Filter
 }
 
@@ -396,4 +404,39 @@ func (t ReadMessageError) Is(target error) bool {
 	_, ok1 := target.(ReadMessageError)
 	_, ok2 := target.(*ReadMessageError)
 	return ok1 || ok2
+}
+
+const (
+	ReconnectionBackoff        = 1 * time.Minute
+	MaxDialReconnectionBackoff = 30 * time.Minute
+)
+
+type DefaultBackoffManager struct {
+	consecutiveDialErrors int
+}
+
+func NewDefaultBackoffManager() *DefaultBackoffManager {
+	return &DefaultBackoffManager{}
+}
+
+func (d *DefaultBackoffManager) GetReconnectionBackoff(err error) time.Duration {
+	if d.isDialError(err) {
+		d.consecutiveDialErrors++
+		return d.dialBackoff(d.consecutiveDialErrors)
+	}
+
+	d.consecutiveDialErrors = 0
+	return ReconnectionBackoff
+}
+
+func (d *DefaultBackoffManager) dialBackoff(n int) time.Duration {
+	a := time.Duration(math.Pow(5, float64(n))) * time.Second
+	if a <= 0 {
+		return MaxDialReconnectionBackoff
+	}
+	return min(a, MaxDialReconnectionBackoff)
+}
+
+func (d *DefaultBackoffManager) isDialError(err error) bool {
+	return errors.Is(err, DialError{})
 }
