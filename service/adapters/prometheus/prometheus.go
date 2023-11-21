@@ -29,6 +29,8 @@ const (
 	labelResultSuccess              = "success"
 	labelResultError                = "error"
 	labelResultInvalidPointerPassed = "invalidPointerPassed"
+
+	labelReason = "reason"
 )
 
 type Prometheus struct {
@@ -40,7 +42,7 @@ type Prometheus struct {
 	receivedEventsCounter                   *prometheus.CounterVec
 	relayConnectionSubscriptionsGauge       *prometheus.GaugeVec
 	relayConnectionReceivedMessagesCounter  *prometheus.CounterVec
-	relayConnectionReconnectionsCounter     *prometheus.CounterVec
+	relayConnectionDisconnectionsCounter    *prometheus.CounterVec
 	storedRelayAddressesGauge               prometheus.Gauge
 
 	registry *prometheus.Registry
@@ -111,12 +113,12 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		},
 		[]string{labelAddress, labelMessageType, labelResult},
 	)
-	relayConnectionReconnectionsCounter := prometheus.NewCounterVec(
+	relayConnectionDisconnectionsCounter := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "relay_connection_reconnections_counter",
-			Help: "Number of reconnections to a relay.",
+			Name: "relay_connection_disconnections_counter",
+			Help: "Number of disconnections to a relay.",
 		},
-		[]string{labelAddress},
+		[]string{labelAddress, labelReason},
 	)
 	storedRelayAddressesGauge := prometheus.NewGauge(
 		prometheus.GaugeOpts{
@@ -136,7 +138,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		receivedEventsCounter,
 		relayConnectionSubscriptionsGauge,
 		relayConnectionReceivedMessagesCounter,
-		relayConnectionReconnectionsCounter,
+		relayConnectionDisconnectionsCounter,
 		storedRelayAddressesGauge,
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		collectors.NewGoCollector(),
@@ -169,7 +171,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		receivedEventsCounter:                   receivedEventsCounter,
 		relayConnectionSubscriptionsGauge:       relayConnectionSubscriptionsGauge,
 		relayConnectionReceivedMessagesCounter:  relayConnectionReceivedMessagesCounter,
-		relayConnectionReconnectionsCounter:     relayConnectionReconnectionsCounter,
+		relayConnectionDisconnectionsCounter:    relayConnectionDisconnectionsCounter,
 		storedRelayAddressesGauge:               storedRelayAddressesGauge,
 
 		registry: reg,
@@ -221,8 +223,11 @@ func (p *Prometheus) ReportMessageReceived(address domain.RelayAddress, messageT
 	p.relayConnectionReceivedMessagesCounter.With(labels).Inc()
 }
 
-func (p *Prometheus) ReportRelayReconnection(address domain.RelayAddress) {
-	p.relayConnectionReconnectionsCounter.With(prometheus.Labels{labelAddress: address.String()}).Inc()
+func (p *Prometheus) ReportRelayDisconnection(address domain.RelayAddress, err error) {
+	p.relayConnectionDisconnectionsCounter.With(prometheus.Labels{
+		labelAddress: address.String(),
+		labelReason:  p.getDisconnectionReason(err),
+	}).Inc()
 }
 
 func (p *Prometheus) ReportNumberOfStoredRelayAddresses(n int) {
@@ -231,6 +236,13 @@ func (p *Prometheus) ReportNumberOfStoredRelayAddresses(n int) {
 
 func (p *Prometheus) Registry() *prometheus.Registry {
 	return p.registry
+}
+
+func (p *Prometheus) getDisconnectionReason(err error) string {
+	if errors.Is(err, relays.DialError{}) {
+		return "dial"
+	}
+	return "unknown"
 }
 
 type ApplicationCall struct {
