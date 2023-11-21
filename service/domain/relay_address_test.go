@@ -3,13 +3,15 @@ package domain
 import (
 	"testing"
 
+	"github.com/boreq/errors"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRelayAddress(t *testing.T) {
 	testCases := []struct {
-		Input  string
-		Output string
+		Input         string
+		Output        string
+		ExpectedError error
 	}{
 		{
 			Input:  "wss://example.com",
@@ -41,13 +43,37 @@ func TestRelayAddress(t *testing.T) {
 			Input:  "wss://example.com/ ",
 			Output: "wss://example.com",
 		},
+		{
+			Input:  "wss://example1.com/ wss://example2.com",
+			Output: "wss://example1.com/ wss://example2.com",
+		},
+		{
+			Input:         "wss:// wss://example.com",
+			ExpectedError: errors.New("url parse error: parse \"wss:// wss://example.com\": invalid character \" \" in host name"),
+		},
+		{
+			Input:  "wss://https://example.com",
+			Output: "wss://https://example.com",
+		},
+		{
+			Input:  "wss://example.",
+			Output: "wss://example.",
+		},
+		{
+			Input:         "https://example.com",
+			ExpectedError: errors.New("invalid protocol"),
+		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.Input, func(t *testing.T) {
 			result, err := NewRelayAddress(testCase.Input)
-			require.NoError(t, err)
-			require.Equal(t, testCase.Output, result.String())
+			if testCase.ExpectedError != nil {
+				require.EqualError(t, err, testCase.ExpectedError.Error())
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, testCase.Output, result.String())
+			}
 		})
 	}
 }
