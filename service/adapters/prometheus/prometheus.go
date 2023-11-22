@@ -44,6 +44,7 @@ type Prometheus struct {
 	relayConnectionReceivedMessagesCounter  *prometheus.CounterVec
 	relayConnectionDisconnectionsCounter    *prometheus.CounterVec
 	storedRelayAddressesGauge               prometheus.Gauge
+	storedEventsGauge                       prometheus.Gauge
 
 	registry *prometheus.Registry
 
@@ -126,6 +127,12 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 			Help: "Number of stored relay addresses.",
 		},
 	)
+	storedEventsGauge := prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "stored_events_gauge",
+			Help: "Number of stored events.",
+		},
+	)
 
 	reg := prometheus.NewRegistry()
 	for _, v := range []prometheus.Collector{
@@ -140,6 +147,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		relayConnectionReceivedMessagesCounter,
 		relayConnectionDisconnectionsCounter,
 		storedRelayAddressesGauge,
+		storedEventsGauge,
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		collectors.NewGoCollector(),
 	} {
@@ -173,6 +181,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		relayConnectionReceivedMessagesCounter:  relayConnectionReceivedMessagesCounter,
 		relayConnectionDisconnectionsCounter:    relayConnectionDisconnectionsCounter,
 		storedRelayAddressesGauge:               storedRelayAddressesGauge,
+		storedEventsGauge:                       storedEventsGauge,
 
 		registry: reg,
 
@@ -232,6 +241,10 @@ func (p *Prometheus) ReportRelayDisconnection(address domain.RelayAddress, err e
 
 func (p *Prometheus) ReportNumberOfStoredRelayAddresses(n int) {
 	p.storedRelayAddressesGauge.Set(float64(n))
+}
+
+func (p *Prometheus) ReportNumberOfStoredEvents(n int) {
+	p.storedEventsGauge.Set(float64(n))
 }
 
 func (p *Prometheus) Registry() *prometheus.Registry {

@@ -69,3 +69,36 @@ func TestEventRepository_ItIsPossibleToSaveAndGetEvents(t *testing.T) {
 	})
 	require.NoError(t, err)
 }
+
+func TestEventRepository_CountCountsSavedEvents(t *testing.T) {
+	ctx := fixtures.TestContext(t)
+	adapters := NewTestAdapters(ctx, t)
+
+	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		n, err := adapters.EventRepository.Count(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 0, n)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	for i := 0; i < 5; i++ {
+		err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+			err := adapters.EventRepository.Save(ctx, fixtures.SomeEvent())
+			require.NoError(t, err)
+
+			return nil
+		})
+		require.NoError(t, err)
+
+		err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+			n, err := adapters.EventRepository.Count(ctx)
+			require.NoError(t, err)
+			require.Equal(t, i+1, n)
+
+			return nil
+		})
+		require.NoError(t, err)
+	}
+}
