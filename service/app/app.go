@@ -30,6 +30,8 @@ type EventRepository interface {
 
 	// Get returns ErrEventNotFound.
 	Get(ctx context.Context, eventID domain.EventId) (domain.Event, error)
+
+	Count(ctx context.Context) (int, error)
 }
 
 type RelayRepository interface {
@@ -96,6 +98,7 @@ type Metrics interface {
 	ReportReceivedEvent(address domain.RelayAddress)
 	ReportQueueLength(topic string, n int)
 	ReportNumberOfStoredRelayAddresses(n int)
+	ReportNumberOfStoredEvents(n int)
 }
 
 type ApplicationCall interface {

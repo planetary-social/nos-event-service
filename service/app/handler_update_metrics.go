@@ -44,6 +44,12 @@ func (h *UpdateMetricsHandler) Handle(ctx context.Context) (err error) {
 		}
 		h.metrics.ReportNumberOfStoredRelayAddresses(n)
 
+		n, err = adapters.Events.Count(ctx)
+		if err != nil {
+			return errors.Wrap(err, "error counting events")
+		}
+		h.metrics.ReportNumberOfStoredEvents(n)
+
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "transaction error")
