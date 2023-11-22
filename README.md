@@ -1,5 +1,24 @@
 # Nos Event Service
 
+A service which crawls relays to replicate events relevant to Nos users which
+then get passed to other services e.g. the notification service or the
+moderation service.
+
+## Design
+
+The service connects to all known relays and replicates the following events:
+- all events of kinds defined in [`globalEventTypesToDownload`][global-event-kinds-to-download-search]
+- all events created by Nos users or users in their contacts lists
+
+The relays are discovered by using the code located in
+[`RelaysExtractor`][relays-extractor-search] to scan nostr events. There is also
+a set of  bootstrap relays returned by
+[`BootstrapRelaySource`][bootstrap-relay-source-search].
+
+The contacts are discovered by using the code located in
+[`ContactsExtractor`][contacts-extractor-search] to scan nostr events.
+
+
 ## Building and running
 
 Build the program like so:
@@ -149,3 +168,7 @@ used in the following cases:
 [code-review-comments]: https://github.com/golang/go/wiki/CodeReviewComments
 [uber-style-guide]: https://github.com/uber-go/guide/blob/master/style.md
 
+[global-event-kinds-to-download-search]: https://github.com/search?q=repo%3Aplanetary-social%2Fnos-event-service+globalEventKindsToDownload&type=code
+[relays-extractor-search]: https://github.com/search?q=repo%3Aplanetary-social%2Fnos-event-service+RelaysExtractor&type=code
+[contacts-extractor-search]: https://github.com/search?q=repo%3Aplanetary-social%2Fnos-event-service+ContactsExtractor&type=code
+[bootstrap-relay-source-search]: https://github.com/search?q=repo%3Aplanetary-social%2Fnos-event-service%20BootstrapRelaySource&type=code
