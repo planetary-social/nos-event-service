@@ -135,7 +135,7 @@ func (h *SaveReceivedEventHandler) shouldBeDirectlyMonitored(ctx context.Context
 }
 
 func (h *SaveReceivedEventHandler) shouldBeGloballyDownloaded(kind domain.EventKind) bool {
-	for _, v := range globalEventTypesToDownload {
+	for _, v := range globalEventKindsToDownload {
 		if v == kind {
 			return true
 		}

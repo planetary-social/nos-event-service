@@ -22,7 +22,7 @@ const (
 )
 
 var (
-	globalEventTypesToDownload = []domain.EventKind{
+	globalEventKindsToDownload = []domain.EventKind{
 		domain.EventKindMetadata,
 		domain.EventKindRecommendedRelay,
 		domain.EventKindContacts,
@@ -216,7 +216,7 @@ func NewRelayDownloader(
 func (d *RelayDownloader) Run(ctx context.Context) {
 	go d.downloadMessages(ctx, domain.NewFilter(
 		nil,
-		globalEventTypesToDownload,
+		globalEventKindsToDownload,
 		nil,
 		d.downloadSince(),
 	))
