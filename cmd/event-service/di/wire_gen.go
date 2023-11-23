@@ -62,7 +62,8 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 		cleanup()
 		return Service{}, nil, err
 	}
-	processSavedEventHandler := app.NewProcessSavedEventHandler(genericTransactionProvider, relaysExtractor, contactsExtractor, externalEventPublisher, logger, prometheusPrometheus)
+	relayConnections := relays.NewRelayConnections(contextContext, logger, prometheusPrometheus)
+	processSavedEventHandler := app.NewProcessSavedEventHandler(genericTransactionProvider, relaysExtractor, contactsExtractor, externalEventPublisher, relayConnections, logger, prometheusPrometheus)
 	sqliteGenericTransactionProvider := sqlite.NewPubSubTxTransactionProvider(db, databaseMutex)
 	pubSub := sqlite.NewPubSub(sqliteGenericTransactionProvider, logger)
 	subscriber := sqlite.NewSubscriber(pubSub, db)
@@ -78,7 +79,6 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	bootstrapRelaySource := relays.NewBootstrapRelaySource()
 	databaseRelaySource := app.NewDatabaseRelaySource(genericTransactionProvider, logger)
 	databasePublicKeySource := app.NewDatabasePublicKeySource(genericTransactionProvider, logger)
-	relayConnections := relays.NewRelayConnections(contextContext, logger, prometheusPrometheus)
 	receivedEventPubSub := memorypubsub.NewReceivedEventPubSub()
 	relayDownloaderFactory := app.NewRelayDownloaderFactory(databasePublicKeySource, relayConnections, receivedEventPubSub, logger, prometheusPrometheus)
 	downloader := app.NewDownloader(bootstrapRelaySource, databaseRelaySource, logger, prometheusPrometheus, relayDownloaderFactory)

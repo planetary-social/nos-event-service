@@ -2,10 +2,28 @@ package app
 
 import (
 	"context"
+	"time"
 
 	"github.com/boreq/errors"
+	"github.com/planetary-social/nos-event-service/internal"
 	"github.com/planetary-social/nos-event-service/internal/logging"
 	"github.com/planetary-social/nos-event-service/service/domain"
+	"github.com/planetary-social/nos-event-service/service/domain/relays"
+)
+
+var (
+	nosRelayAddress                    = domain.MustNewRelayAddress("wss://relay.nos.social")
+	eventKindsWhichShouldBeSentToRelay = internal.NewSetVariadic(
+		domain.EventKindMetadata,
+		domain.EventKindContacts,
+		domain.EventKindRelayListMetadata,
+	)
+	pushToRelayFilter = NewEventFilter(
+		internal.Pointer(900*time.Second),
+		nil,
+		internal.Pointer(65536),
+		internal.Pointer(1024),
+	)
 )
 
 type ProcessSavedEvent struct {
@@ -21,6 +39,7 @@ type ProcessSavedEventHandler struct {
 	relaysExtractor        RelaysExtractor
 	contactsExtractor      ContactsExtractor
 	externalEventPublisher ExternalEventPublisher
+	relayConnections       RelayConnections
 	logger                 logging.Logger
 	metrics                Metrics
 }
@@ -30,6 +49,7 @@ func NewProcessSavedEventHandler(
 	relaysExtractor RelaysExtractor,
 	contactsExtractor ContactsExtractor,
 	externalEventPublisher ExternalEventPublisher,
+	relayConnections RelayConnections,
 	logger logging.Logger,
 	metrics Metrics,
 ) *ProcessSavedEventHandler {
@@ -38,6 +58,7 @@ func NewProcessSavedEventHandler(
 		relaysExtractor:        relaysExtractor,
 		contactsExtractor:      contactsExtractor,
 		externalEventPublisher: externalEventPublisher,
+		relayConnections:       relayConnections,
 		logger:                 logger.New("processSavedEventHandler"),
 		metrics:                metrics,
 	}
@@ -57,6 +78,10 @@ func (h *ProcessSavedEventHandler) Handle(ctx context.Context, cmd ProcessSavedE
 
 	if err := h.externalEventPublisher.PublishNewEventReceived(ctx, event); err != nil {
 		return errors.Wrap(err, "error publishing the external event")
+	}
+
+	if err := h.maybeSendEventToRelay(ctx, event); err != nil {
+		return errors.Wrapf(err, "error sending the event '%s' to relay", event.Id().Hex())
 	}
 
 	return nil
@@ -137,4 +162,37 @@ func (h *ProcessSavedEventHandler) shouldReplaceContacts(ctx context.Context, ad
 	}
 
 	return domain.ShouldReplaceContactsEvent(oldEvent, newEvent)
+}
+
+func (h *ProcessSavedEventHandler) maybeSendEventToRelay(ctx context.Context, event domain.Event) error {
+	if !eventKindsWhichShouldBeSentToRelay.Contains(event.Kind()) {
+		return nil
+	}
+
+	if !pushToRelayFilter.IsOk(event) {
+		return nil
+	}
+
+	if err := h.relayConnections.SendEvent(ctx, nosRelayAddress, event); err != nil {
+		if h.shouldDisregardSendEventErr(err) {
+			return nil
+		}
+		return errors.Wrap(err, "error sending event to relay")
+	}
+
+	return nil
+}
+
+func (h *ProcessSavedEventHandler) shouldDisregardSendEventErr(err error) bool {
+	var okResponseErr relays.OKResponseError
+	if errors.As(err, &okResponseErr) {
+		switch okResponseErr.Reason() {
+		case "replaced: have newer event":
+			return true
+		default:
+			return false
+		}
+	}
+
+	return false
 }

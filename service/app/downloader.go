@@ -10,7 +10,6 @@ import (
 	"github.com/planetary-social/nos-event-service/internal"
 	"github.com/planetary-social/nos-event-service/internal/logging"
 	"github.com/planetary-social/nos-event-service/service/domain"
-	"github.com/planetary-social/nos-event-service/service/domain/relays"
 )
 
 const (
@@ -40,10 +39,6 @@ type BootstrapRelaySource interface {
 
 type RelaySource interface {
 	GetRelays(ctx context.Context) ([]domain.RelayAddress, error)
-}
-
-type RelayConnections interface {
-	GetEvents(ctx context.Context, relayAddress domain.RelayAddress, filter domain.Filter) (<-chan relays.EventOrEndOfSavedEvents, error)
 }
 
 type PublicKeySource interface {

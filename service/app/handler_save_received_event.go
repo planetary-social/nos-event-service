@@ -2,10 +2,21 @@ package app
 
 import (
 	"context"
+	"time"
 
 	"github.com/boreq/errors"
+	"github.com/planetary-social/nos-event-service/internal"
 	"github.com/planetary-social/nos-event-service/internal/logging"
 	"github.com/planetary-social/nos-event-service/service/domain"
+)
+
+var (
+	saveFilter = NewEventFilter(
+		internal.Pointer(12*time.Hour),
+		nil,
+		internal.Pointer(1*1000*1000),
+		internal.Pointer(10000),
+	)
 )
 
 type SaveReceivedEvent struct {
@@ -45,6 +56,10 @@ func (h *SaveReceivedEventHandler) Handle(ctx context.Context, cmd SaveReceivedE
 		WithField("event.createdAt", cmd.event.CreatedAt().String()).
 		WithField("event.kind", cmd.event.Kind().Int()).
 		Message("saving received event")
+
+	if !saveFilter.IsOk(cmd.event) {
+		return nil
+	}
 
 	if err := h.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
 		exists, err := h.eventAlreadyExists(ctx, adapters, cmd.event)

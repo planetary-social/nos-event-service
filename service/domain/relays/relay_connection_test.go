@@ -27,6 +27,14 @@ func TestReadMessageErrorIs(t *testing.T) {
 	require.ErrorIs(t, errors.Wrap(err, "wrapped"), &relays.ReadMessageError{})
 }
 
+func TestOKResponseErrorErrorIs(t *testing.T) {
+	err := relays.NewOKResponseError(fixtures.SomeString())
+	require.ErrorIs(t, err, relays.OKResponseError{})
+	require.ErrorIs(t, err, &relays.OKResponseError{})
+	require.ErrorIs(t, errors.Wrap(err, "wrapped"), relays.OKResponseError{})
+	require.ErrorIs(t, errors.Wrap(err, "wrapped"), &relays.OKResponseError{})
+}
+
 func TestDefaultBackoffManager_GetReconnectionBackoffReturnsSaneResultsForDialErrors(t *testing.T) {
 	m := relays.NewDefaultBackoffManager()
 	for i := 0; i < 100; i++ {

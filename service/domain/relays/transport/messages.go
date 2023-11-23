@@ -37,3 +37,19 @@ func (m MessageClose) MarshalJSON() ([]byte, error) {
 	env := nostr.CloseEnvelope(m.subscriptionID.String())
 	return env.MarshalJSON()
 }
+
+type MessageEvent struct {
+	event domain.Event
+}
+
+func NewMessageEvent(event domain.Event) *MessageEvent {
+	return &MessageEvent{event: event}
+}
+
+func (m MessageEvent) MarshalJSON() ([]byte, error) {
+	env := nostr.EventEnvelope{
+		SubscriptionID: nil,
+		Event:          m.event.Libevent(),
+	}
+	return env.MarshalJSON()
+}
