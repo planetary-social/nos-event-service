@@ -12,6 +12,7 @@ var (
 	EventKindEncryptedDirectMessage = MustNewEventKind(4)
 	EventKindReaction               = MustNewEventKind(7)
 	EventKindRelayListMetadata      = MustNewEventKind(10002)
+	EventKindRegistration           = MustNewEventKind(6666)
 )
 
 type EventKind struct {

@@ -2,17 +2,18 @@ package http
 
 import (
 	"context"
-	"encoding/json"
 	"net"
 	"net/http"
 
 	"github.com/boreq/errors"
-	"github.com/boreq/rest"
+	"github.com/gorilla/websocket"
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/planetary-social/nos-event-service/internal/logging"
 	prometheusadapters "github.com/planetary-social/nos-event-service/service/adapters/prometheus"
 	"github.com/planetary-social/nos-event-service/service/app"
 	"github.com/planetary-social/nos-event-service/service/config"
 	"github.com/planetary-social/nos-event-service/service/domain"
+	"github.com/planetary-social/nos-event-service/service/domain/relays/transport"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -58,42 +59,104 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 func (s *Server) createMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.HandlerFor(s.prometheus.Registry(), promhttp.HandlerOpts{}))
-	mux.Handle("/public-keys-to-monitor", rest.Wrap(s.publicKeysToMonitor))
+	mux.HandleFunc("/", s.serveWs)
 	return mux
 }
 
-func (s *Server) publicKeysToMonitor(r *http.Request) rest.RestResponse {
-	switch r.Method {
-	case http.MethodPost:
-		return s.postPublicKeyToMonitor(r)
-	default:
-		return rest.ErrMethodNotAllowed
-	}
-}
+func (s *Server) serveWs(rw http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
-func (s *Server) postPublicKeyToMonitor(r *http.Request) rest.RestResponse {
-	var t postPublicKeyToMonitorInput
-	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
-		s.logger.Error().WithError(err).Message("error decoding post public key to monitor input")
-		return rest.ErrBadRequest
+	var upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
 	}
 
-	publicKey, err := domain.NewPublicKeyFromHex(t.PublicKey)
+	conn, err := upgrader.Upgrade(rw, r, nil)
 	if err != nil {
-		s.logger.Error().WithError(err).Message("error creating a public key")
-		return rest.ErrBadRequest
+		s.logger.Error().WithError(err).Message("error upgrading the connection")
+		return
 	}
 
-	cmd := app.NewAddPublicKeyToMonitor(publicKey)
+	defer func() {
+		if err := conn.Close(); err != nil {
+			s.logger.Error().WithError(err).Message("error closing the connection")
+		}
+	}()
 
-	if err := s.app.AddPublicKeyToMonitor.Handle(r.Context(), cmd); err != nil {
-		s.logger.Error().WithError(err).Message("error calling the add public key to monitor handler")
-		return rest.ErrInternalServerError
+	if err := s.handleConnection(ctx, conn); err != nil {
+		closeErr := &websocket.CloseError{}
+		if !errors.As(err, &closeErr) || closeErr.Code != websocket.CloseNormalClosure {
+			s.logger.Error().WithError(err).Message("error handling the connection")
+		}
 	}
-
-	return rest.NewResponse(nil)
 }
 
-type postPublicKeyToMonitorInput struct {
-	PublicKey string `json:"publicKey"`
+func (s *Server) handleConnection(ctx context.Context, conn *websocket.Conn) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	for {
+		_, messageBytes, err := conn.ReadMessage()
+		if err != nil {
+			return errors.Wrap(err, "error reading the websocket message")
+		}
+
+		message := nostr.ParseMessage(messageBytes)
+		if message == nil {
+			s.logger.
+				Error().
+				WithError(err).
+				WithField("message", string(messageBytes)).
+				Message("error parsing a message")
+			return errors.New("failed to parse a message")
+		}
+
+		switch v := message.(type) {
+		case *nostr.EventEnvelope:
+			msg := s.processEventReturningOK(ctx, v.Event)
+
+			msgJSON, err := msg.MarshalJSON()
+			if err != nil {
+				return errors.Wrap(err, "error marshaling a message")
+			}
+
+			if err := conn.WriteMessage(websocket.TextMessage, msgJSON); err != nil {
+				return errors.Wrap(err, "error writing a message")
+			}
+		default:
+			s.logger.Error().WithField("message", message).Message("received an unknown message")
+			return errors.New("unknown message received")
+		}
+	}
+}
+
+func (s *Server) processEventReturningOK(ctx context.Context, event nostr.Event) transport.MessageOK {
+	if err := s.processEvent(ctx, event); err != nil {
+		s.logger.
+			Error().
+			WithError(err).
+			Message("error processing an event")
+		return transport.NewMessageOKWithError(event.ID, err.Error())
+	}
+	return transport.NewMessageOKWithSuccess(event.ID)
+}
+
+func (s *Server) processEvent(ctx context.Context, libevent nostr.Event) error {
+	event, err := domain.NewEvent(libevent)
+	if err != nil {
+		return errors.Wrap(err, "error creating an event")
+	}
+
+	registration, err := domain.NewRegistrationFromEvent(event)
+	if err != nil {
+		return errors.Wrap(err, "error creating a registration")
+	}
+
+	cmd := app.NewAddPublicKeyToMonitor(registration.PublicKey())
+
+	if err := s.app.AddPublicKeyToMonitor.Handle(ctx, cmd); err != nil {
+		return errors.Wrap(err, "error calling the handler")
+	}
+
+	return nil
 }
