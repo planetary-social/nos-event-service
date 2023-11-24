@@ -24,6 +24,8 @@ type BackoffManager interface {
 	GetNoMessagesBackoff(tick int) time.Duration
 }
 
+var ErrQueueEmpty = errors.New("queue is empty")
+
 type PubsubTransactionProvider interface {
 	Transact(context.Context, func(context.Context, *sql.Tx) error) error
 }
@@ -168,6 +170,32 @@ func (p *PubSub) QueueLength(ctx context.Context, topic string) (int, error) {
 	}
 
 	return count, nil
+}
+
+// OldestMessageAge returns ErrQueueEmpty if the queue is empty.
+func (p *PubSub) OldestMessageAge(ctx context.Context, topic string) (time.Duration, error) {
+	var age time.Duration
+	if err := p.transactionProvider.Transact(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		row := tx.QueryRow(
+			"SELECT created_at FROM pubsub WHERE topic = ? ORDER BY created_at ASC LIMIT 1",
+			topic,
+		)
+
+		var tmp int64
+		if err := row.Scan(&tmp); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrQueueEmpty
+			}
+			return errors.Wrap(err, "row scan error")
+		}
+
+		age = time.Since(time.Unix(tmp, 0))
+		return nil
+	}); err != nil {
+		return 0, errors.Wrap(err, "transaction error")
+	}
+
+	return age, nil
 }
 
 func (p *PubSub) subscribe(ctx context.Context, topic string, ch chan *ReceivedMessage) {

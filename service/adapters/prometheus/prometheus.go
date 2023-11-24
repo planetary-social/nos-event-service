@@ -38,6 +38,7 @@ type Prometheus struct {
 	applicationHandlerCallDurationHistogram *prometheus.HistogramVec
 	relayDownloadersGauge                   prometheus.Gauge
 	subscriptionQueueLengthGauge            *prometheus.GaugeVec
+	subscriptionQueueOldestMessageAgeGauge  *prometheus.GaugeVec
 	relayConnectionStateGauge               *prometheus.GaugeVec
 	receivedEventsCounter                   *prometheus.CounterVec
 	relayConnectionSubscriptionsGauge       *prometheus.GaugeVec
@@ -77,6 +78,13 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		prometheus.GaugeOpts{
 			Name: "subscription_queue_length",
 			Help: "Number of events in the subscription queue.",
+		},
+		[]string{labelTopic},
+	)
+	subscriptionQueueOldestMessageAgeGauge := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "subscription_queue_oldest_message_age",
+			Help: "Age of the oldest event in the subscription queue in seconds.",
 		},
 		[]string{labelTopic},
 	)
@@ -140,6 +148,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		applicationHandlerCallDurationHistogram,
 		versionGague,
 		subscriptionQueueLengthGauge,
+		subscriptionQueueOldestMessageAgeGauge,
 		relayDownloadersGauge,
 		relayConnectionStateGauge,
 		receivedEventsCounter,
@@ -175,6 +184,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		applicationHandlerCallDurationHistogram: applicationHandlerCallDurationHistogram,
 		relayDownloadersGauge:                   relayDownloadersGauge,
 		subscriptionQueueLengthGauge:            subscriptionQueueLengthGauge,
+		subscriptionQueueOldestMessageAgeGauge:  subscriptionQueueOldestMessageAgeGauge,
 		relayConnectionStateGauge:               relayConnectionStateGauge,
 		receivedEventsCounter:                   receivedEventsCounter,
 		relayConnectionSubscriptionsGauge:       relayConnectionSubscriptionsGauge,
@@ -215,6 +225,10 @@ func (p *Prometheus) ReportReceivedEvent(address domain.RelayAddress) {
 
 func (p *Prometheus) ReportQueueLength(topic string, n int) {
 	p.subscriptionQueueLengthGauge.With(prometheus.Labels{labelTopic: topic}).Set(float64(n))
+}
+
+func (p *Prometheus) ReportQueueOldestMessageAge(topic string, age time.Duration) {
+	p.subscriptionQueueOldestMessageAgeGauge.With(prometheus.Labels{labelTopic: topic}).Set(age.Seconds())
 }
 
 func (p *Prometheus) ReportNumberOfSubscriptions(address domain.RelayAddress, n int) {

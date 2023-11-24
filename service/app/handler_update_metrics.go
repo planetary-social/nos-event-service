@@ -37,6 +37,17 @@ func (h *UpdateMetricsHandler) Handle(ctx context.Context) (err error) {
 	}
 	h.metrics.ReportQueueLength("eventSaved", n)
 
+	age, err := h.subscriber.EventSavedOldestMessageAge(ctx)
+	if err != nil {
+		if errors.Is(err, ErrEventSavedQueueEmpty) {
+			h.metrics.ReportQueueOldestMessageAge("eventSaved", 0)
+		} else {
+			return errors.Wrap(err, "error reading oldest message age")
+		}
+	} else {
+		h.metrics.ReportQueueOldestMessageAge("eventSaved", age)
+	}
+
 	if err := h.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
 		n, err := adapters.Relays.Count(ctx)
 		if err != nil {
