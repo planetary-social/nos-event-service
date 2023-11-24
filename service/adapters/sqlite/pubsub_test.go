@@ -205,6 +205,38 @@ func TestPubSub_QueueLengthReportsNumberOfElementsInQueue(t *testing.T) {
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
+func TestPubSub_OldestMessageAgeReturnsPredefinedError(t *testing.T) {
+	t.Parallel()
+
+	ctx := fixtures.TestContext(t)
+	adapters := NewTestAdapters(ctx, t)
+
+	topic := fixtures.SomeString()
+	_, err := adapters.PubSub.OldestMessageAge(ctx, topic)
+	require.ErrorIs(t, err, sqlite.ErrQueueEmpty)
+}
+
+func TestPubSub_OldestMessageAgeReportsOldestMessageAge(t *testing.T) {
+	t.Parallel()
+
+	ctx := fixtures.TestContext(t)
+	adapters := NewTestAdapters(ctx, t)
+
+	msg, err := sqlite.NewMessage(fixtures.SomeString(), nil)
+	require.NoError(t, err)
+
+	topic := fixtures.SomeString()
+
+	err = adapters.PubSub.Publish(ctx, topic, msg)
+	require.NoError(t, err)
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		age, err := adapters.PubSub.OldestMessageAge(ctx, topic)
+		assert.NoError(t, err)
+		assert.Greater(t, age.Seconds(), float64(0))
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
 func TestDefaultBackoffManager_GetMessageErrorBackoffStatisticallyFallsWithinCertainEpsilon(t *testing.T) {
 	const numSamples = 1000
 

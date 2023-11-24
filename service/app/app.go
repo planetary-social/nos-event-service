@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"time"
 
 	"github.com/boreq/errors"
 	"github.com/planetary-social/nos-event-service/service/domain"
@@ -99,6 +100,7 @@ type Metrics interface {
 	ReportNumberOfRelayDownloaders(n int)
 	ReportReceivedEvent(address domain.RelayAddress)
 	ReportQueueLength(topic string, n int)
+	ReportQueueOldestMessageAge(topic string, age time.Duration)
 	ReportNumberOfStoredRelayAddresses(n int)
 	ReportNumberOfStoredEvents(n int)
 }
@@ -120,8 +122,13 @@ type ContactsExtractor interface {
 	Extract(event domain.Event) ([]domain.PublicKey, error)
 }
 
+var ErrEventSavedQueueEmpty = errors.New("event saved queue is empty")
+
 type Subscriber interface {
 	EventSavedQueueLength(ctx context.Context) (int, error)
+
+	// EventSavedOldestMessageAge returns ErrEventSavedQueueEmpty.
+	EventSavedOldestMessageAge(ctx context.Context) (time.Duration, error)
 }
 
 type RelayConnections interface {
