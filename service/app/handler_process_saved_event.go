@@ -189,6 +189,8 @@ func (h *ProcessSavedEventHandler) shouldDisregardSendEventErr(err error) bool {
 		switch okResponseErr.Reason() {
 		case "replaced: have newer event":
 			return true
+		case "invalid: uneven size input to from_hex":
+			return true
 		default:
 			return false
 		}
