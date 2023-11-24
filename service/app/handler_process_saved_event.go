@@ -164,23 +164,35 @@ func (h *ProcessSavedEventHandler) shouldReplaceContacts(ctx context.Context, ad
 	return domain.ShouldReplaceContactsEvent(oldEvent, newEvent)
 }
 
-func (h *ProcessSavedEventHandler) maybeSendEventToRelay(ctx context.Context, event domain.Event) error {
-	if !eventKindsWhichShouldBeSentToRelay.Contains(event.Kind()) {
-		return nil
-	}
-
-	if !pushToRelayFilter.IsOk(event) {
+func (h *ProcessSavedEventHandler) maybeSendEventToRelay(ctx context.Context, event domain.Event) (err error) {
+	if !h.shouldSendEventToRelay(event) {
+		h.metrics.ReportEventSentToRelay(nosRelayAddress, SendEventToRelayDecisionIgnore, SendEventToRelayResultSuccess)
 		return nil
 	}
 
 	if err := h.relayConnections.SendEvent(ctx, nosRelayAddress, event); err != nil {
 		if h.shouldDisregardSendEventErr(err) {
+			h.metrics.ReportEventSentToRelay(nosRelayAddress, SendEventToRelayDecisionSend, SendEventToRelayResultIgnoreError)
 			return nil
 		}
+		h.metrics.ReportEventSentToRelay(nosRelayAddress, SendEventToRelayDecisionSend, SendEventToRelayResultError)
 		return errors.Wrap(err, "error sending event to relay")
 	}
 
+	h.metrics.ReportEventSentToRelay(nosRelayAddress, SendEventToRelayDecisionSend, SendEventToRelayResultSuccess)
 	return nil
+}
+
+func (h *ProcessSavedEventHandler) shouldSendEventToRelay(event domain.Event) bool {
+	if !eventKindsWhichShouldBeSentToRelay.Contains(event.Kind()) {
+		return false
+	}
+
+	if !pushToRelayFilter.IsOk(event) {
+		return false
+	}
+
+	return true
 }
 
 func (h *ProcessSavedEventHandler) shouldDisregardSendEventErr(err error) bool {

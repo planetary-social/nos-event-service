@@ -103,6 +103,7 @@ type Metrics interface {
 	ReportQueueOldestMessageAge(topic string, age time.Duration)
 	ReportNumberOfStoredRelayAddresses(n int)
 	ReportNumberOfStoredEvents(n int)
+	ReportEventSentToRelay(address domain.RelayAddress, decision SendEventToRelayDecision, result SendEventToRelayResult)
 }
 
 type ApplicationCall interface {
@@ -134,4 +135,31 @@ type Subscriber interface {
 type RelayConnections interface {
 	GetEvents(ctx context.Context, relayAddress domain.RelayAddress, filter domain.Filter) (<-chan relays.EventOrEndOfSavedEvents, error)
 	SendEvent(ctx context.Context, relayAddress domain.RelayAddress, event domain.Event) error
+}
+
+var (
+	SendEventToRelayDecisionSend   = SendEventToRelayDecision{"send"}
+	SendEventToRelayDecisionIgnore = SendEventToRelayDecision{"ignore"}
+)
+
+type SendEventToRelayDecision struct {
+	s string
+}
+
+func (r SendEventToRelayDecision) String() string {
+	return r.s
+}
+
+var (
+	SendEventToRelayResultIgnoreError = SendEventToRelayResult{"ignoreError"}
+	SendEventToRelayResultSuccess     = SendEventToRelayResult{"success"}
+	SendEventToRelayResultError       = SendEventToRelayResult{"error"}
+)
+
+type SendEventToRelayResult struct {
+	s string
+}
+
+func (r SendEventToRelayResult) String() string {
+	return r.s
 }
