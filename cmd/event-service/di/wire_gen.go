@@ -69,11 +69,13 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	subscriber := sqlite.NewSubscriber(pubSub, db)
 	updateMetricsHandler := app.NewUpdateMetricsHandler(genericTransactionProvider, subscriber, logger, prometheusPrometheus)
 	addPublicKeyToMonitorHandler := app.NewAddPublicKeyToMonitorHandler(genericTransactionProvider, logger, prometheusPrometheus)
+	getEventHandler := app.NewGetEventHandler(genericTransactionProvider, logger, prometheusPrometheus)
 	application := app.Application{
 		SaveReceivedEvent:     saveReceivedEventHandler,
 		ProcessSavedEvent:     processSavedEventHandler,
 		UpdateMetrics:         updateMetricsHandler,
 		AddPublicKeyToMonitor: addPublicKeyToMonitorHandler,
+		GetEvent:              getEventHandler,
 	}
 	server := http.NewServer(configConfig, logger, application, prometheusPrometheus)
 	bootstrapRelaySource := relays.NewBootstrapRelaySource()

@@ -58,7 +58,7 @@ func (s *EventSavedEventSubscriber) handleMessage(ctx context.Context, msg *sqli
 		return errors.Wrap(err, "error unmarshaling")
 	}
 
-	eventID, err := domain.NewEventId(transport.EventID)
+	eventID, err := domain.NewEventIdFromHex(transport.EventID)
 	if err != nil {
 		return errors.Wrap(err, "error creating an account id")
 	}

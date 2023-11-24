@@ -6,8 +6,10 @@ require (
 	github.com/ThreeDotsLabs/watermill v1.3.1
 	github.com/ThreeDotsLabs/watermill-googlecloud v1.0.13
 	github.com/boreq/errors v0.1.0
+	github.com/boreq/rest v0.1.0
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
 	github.com/google/wire v0.5.0
+	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/mattn/go-sqlite3 v1.14.18

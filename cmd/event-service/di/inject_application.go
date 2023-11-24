@@ -18,4 +18,5 @@ var applicationSet = wire.NewSet(
 
 	app.NewUpdateMetricsHandler,
 	app.NewAddPublicKeyToMonitorHandler,
+	app.NewGetEventHandler,
 )
