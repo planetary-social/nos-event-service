@@ -31,6 +31,8 @@ const (
 	labelResultInvalidPointerPassed = "invalidPointerPassed"
 
 	labelReason = "reason"
+
+	labelDecision = "decision"
 )
 
 type Prometheus struct {
@@ -46,6 +48,7 @@ type Prometheus struct {
 	relayConnectionDisconnectionsCounter    *prometheus.CounterVec
 	storedRelayAddressesGauge               prometheus.Gauge
 	storedEventsGauge                       prometheus.Gauge
+	eventsSentToRelayCounter                *prometheus.CounterVec
 
 	registry *prometheus.Registry
 
@@ -125,7 +128,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 	relayConnectionDisconnectionsCounter := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "relay_connection_disconnections_counter",
-			Help: "Number of disconnections to a relay.",
+			Help: "Number of disconnections per relay.",
 		},
 		[]string{labelAddress, labelReason},
 	)
@@ -140,6 +143,13 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 			Name: "stored_events_gauge",
 			Help: "Number of stored events.",
 		},
+	)
+	eventsSentToRelayCounter := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "events_sent_to_relay_counter",
+			Help: "Number of events sent to relay.",
+		},
+		[]string{labelAddress, labelDecision, labelResult},
 	)
 
 	reg := prometheus.NewRegistry()
@@ -157,6 +167,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		relayConnectionDisconnectionsCounter,
 		storedRelayAddressesGauge,
 		storedEventsGauge,
+		eventsSentToRelayCounter,
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		collectors.NewGoCollector(),
 	} {
@@ -192,6 +203,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		relayConnectionDisconnectionsCounter:    relayConnectionDisconnectionsCounter,
 		storedRelayAddressesGauge:               storedRelayAddressesGauge,
 		storedEventsGauge:                       storedEventsGauge,
+		eventsSentToRelayCounter:                eventsSentToRelayCounter,
 
 		registry: reg,
 
@@ -259,6 +271,14 @@ func (p *Prometheus) ReportNumberOfStoredRelayAddresses(n int) {
 
 func (p *Prometheus) ReportNumberOfStoredEvents(n int) {
 	p.storedEventsGauge.Set(float64(n))
+}
+
+func (p *Prometheus) ReportEventSentToRelay(address domain.RelayAddress, decision app.SendEventToRelayDecision, result app.SendEventToRelayResult) {
+	p.eventsSentToRelayCounter.With(prometheus.Labels{
+		labelAddress:  address.String(),
+		labelDecision: decision.String(),
+		labelResult:   result.String(),
+	}).Inc()
 }
 
 func (p *Prometheus) Registry() *prometheus.Registry {
