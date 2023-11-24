@@ -12,7 +12,7 @@ type EventId struct {
 	s string
 }
 
-func NewEventId(s string) (EventId, error) {
+func NewEventIdFromHex(s string) (EventId, error) {
 	b, err := hex.DecodeString(s)
 	if err != nil {
 		return EventId{}, errors.Wrap(err, "error decoding hex")
@@ -27,7 +27,7 @@ func NewEventId(s string) (EventId, error) {
 }
 
 func MustNewEventId(s string) EventId {
-	v, err := NewEventId(s)
+	v, err := NewEventIdFromHex(s)
 	if err != nil {
 		panic(err)
 	}
@@ -46,7 +46,7 @@ func NewEventIdFromNote(s string) (EventId, error) {
 	if !ok {
 		return EventId{}, errors.New("library returned invalid type")
 	}
-	return NewEventId(s)
+	return NewEventIdFromHex(s)
 }
 
 func (id EventId) Hex() string {

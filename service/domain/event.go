@@ -40,7 +40,7 @@ func NewEvent(libevent nostr.Event) (Event, error) {
 		return Event{}, errors.New("invalid signature")
 	}
 
-	id, err := NewEventId(libevent.ID)
+	id, err := NewEventIdFromHex(libevent.ID)
 	if err != nil {
 		return Event{}, errors.Wrap(err, "error creating an event id")
 	}

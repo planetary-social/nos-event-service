@@ -2,10 +2,13 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
 
 	"github.com/boreq/errors"
+	"github.com/boreq/rest"
+	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/planetary-social/nos-event-service/internal/logging"
@@ -56,11 +59,12 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	return http.Serve(listener, mux)
 }
 
-func (s *Server) createMux() *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.HandlerFor(s.prometheus.Registry(), promhttp.HandlerOpts{}))
-	mux.HandleFunc("/", s.serveWs)
-	return mux
+func (s *Server) createMux() http.Handler {
+	r := mux.NewRouter()
+	r.Handle("/metrics", promhttp.HandlerFor(s.prometheus.Registry(), promhttp.HandlerOpts{}))
+	r.HandleFunc("/events/{id}", rest.Wrap(s.serveEvents))
+	r.HandleFunc("/", s.serveWs)
+	return r
 }
 
 func (s *Server) serveWs(rw http.ResponseWriter, r *http.Request) {
@@ -89,6 +93,41 @@ func (s *Server) serveWs(rw http.ResponseWriter, r *http.Request) {
 			s.logger.Error().WithError(err).Message("error handling the connection")
 		}
 	}
+}
+
+func (s *Server) serveEvents(r *http.Request) rest.RestResponse {
+	switch r.Method {
+	case http.MethodGet:
+		vars := mux.Vars(r)
+		idString := vars["id"]
+
+		eventID, err := domain.NewEventIdFromHex(idString)
+		if err != nil {
+			return rest.ErrBadRequest.WithMessage("event id must be in hex")
+		}
+
+		event, err := s.app.GetEvent.Handle(r.Context(), app.NewGetEvent(eventID))
+		if err != nil {
+			if errors.Is(err, app.ErrEventNotFound) {
+				return rest.ErrNotFound
+			}
+
+			s.logger.Error().WithError(err).Message("error getting an event")
+			return rest.ErrInternalServerError
+		}
+
+		return rest.NewResponse(newGetEventTransport(event))
+	default:
+		return rest.ErrMethodNotAllowed
+	}
+}
+
+type getEventTransport struct {
+	Event json.RawMessage `json:"event"`
+}
+
+func newGetEventTransport(event domain.Event) getEventTransport {
+	return getEventTransport{Event: event.Raw()}
 }
 
 func (s *Server) handleConnection(ctx context.Context, conn *websocket.Conn) error {

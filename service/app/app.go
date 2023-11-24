@@ -70,6 +70,7 @@ type Application struct {
 	ProcessSavedEvent     *ProcessSavedEventHandler
 	UpdateMetrics         *UpdateMetricsHandler
 	AddPublicKeyToMonitor *AddPublicKeyToMonitorHandler
+	GetEvent              *GetEventHandler
 }
 
 type ReceivedEvent struct {

@@ -357,7 +357,7 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 			WithField("message", string(messageBytes)).
 			Message("received a message (ok)")
 
-		eventID, err := domain.NewEventId(v.EventID)
+		eventID, err := domain.NewEventIdFromHex(v.EventID)
 		if err != nil {
 			return errors.Wrap(err, "error creating an event")
 		}
