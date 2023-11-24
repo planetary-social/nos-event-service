@@ -29,6 +29,7 @@ var (
 	MessageTypeEOSE    = MessageType{"eose"}
 	MessageTypeEvent   = MessageType{"event"}
 	MessageTypeAuth    = MessageType{"auth"}
+	MessageTypeOK      = MessageType{"ok"}
 	MessageTypeUnknown = MessageType{"unknown"}
 )
 
@@ -61,6 +62,11 @@ func NewRelayConnections(ctx context.Context, logger logging.Logger, metrics Met
 func (d *RelayConnections) GetEvents(ctx context.Context, relayAddress domain.RelayAddress, filter domain.Filter) (<-chan EventOrEndOfSavedEvents, error) {
 	connection := d.getConnection(relayAddress)
 	return connection.GetEvents(ctx, filter)
+}
+
+func (d *RelayConnections) SendEvent(ctx context.Context, relayAddress domain.RelayAddress, event domain.Event) error {
+	connection := d.getConnection(relayAddress)
+	return connection.SendEvent(ctx, event)
 }
 
 func (d *RelayConnections) storeMetricsLoop(ctx context.Context) {

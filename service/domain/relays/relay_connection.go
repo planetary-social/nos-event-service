@@ -17,6 +17,10 @@ import (
 	"github.com/planetary-social/nos-event-service/service/domain/relays/transport"
 )
 
+const (
+	sendEventTimeout = 30 * time.Second
+)
+
 type BackoffManager interface {
 	GetReconnectionBackoff(err error) time.Duration
 }
@@ -34,6 +38,10 @@ type RelayConnection struct {
 	subscriptionsUpdatedCh       chan struct{}
 	subscriptionsUpdatedChClosed bool
 	subscriptionsMutex           sync.Mutex
+
+	eventsToSend      map[domain.EventId][]eventToSend
+	eventsToSendMutex sync.Mutex
+	newEventsCh       chan domain.Event
 }
 
 func NewRelayConnection(
@@ -49,6 +57,8 @@ func NewRelayConnection(
 		state:                  RelayConnectionStateInitializing,
 		subscriptions:          make(map[transport.SubscriptionID]subscription),
 		subscriptionsUpdatedCh: make(chan struct{}),
+		eventsToSend:           make(map[domain.EventId][]eventToSend),
+		newEventsCh:            make(chan domain.Event),
 	}
 }
 
@@ -70,24 +80,14 @@ func (r *RelayConnection) Run(ctx context.Context) {
 	}
 }
 
-func (r *RelayConnection) logRunErr(err error) {
-	l := r.logger.Error()
-	if r.errorIsCommonAndShouldNotBeLoggedOnErrorLevel(err) {
-		l = r.logger.Debug()
-	}
-	l.WithError(err).Message("encountered an error")
+func (r *RelayConnection) State() RelayConnectionState {
+	r.stateMutex.Lock()
+	defer r.stateMutex.Unlock()
+	return r.state
 }
 
-func (r *RelayConnection) errorIsCommonAndShouldNotBeLoggedOnErrorLevel(err error) bool {
-	if errors.Is(err, DialError{}) {
-		return true
-	}
-
-	if errors.Is(err, ReadMessageError{}) {
-		return true
-	}
-
-	return false
+func (r *RelayConnection) Address() domain.RelayAddress {
+	return r.address
 }
 
 func (r *RelayConnection) GetEvents(ctx context.Context, filter domain.Filter) (<-chan EventOrEndOfSavedEvents, error) {
@@ -111,7 +111,7 @@ func (r *RelayConnection) GetEvents(ctx context.Context, filter domain.Filter) (
 
 	go func() {
 		<-ctx.Done()
-		if err := r.removeChannel(ch); err != nil {
+		if err := r.removeSubscriptionChannel(ch); err != nil {
 			panic(err)
 		}
 	}()
@@ -119,17 +119,70 @@ func (r *RelayConnection) GetEvents(ctx context.Context, filter domain.Filter) (
 	return ch, nil
 }
 
-func (r *RelayConnection) State() RelayConnectionState {
-	r.stateMutex.Lock()
-	defer r.stateMutex.Unlock()
-	return r.state
+func (r *RelayConnection) SendEvent(ctx context.Context, event domain.Event) error {
+	ctx, cancel := context.WithTimeout(ctx, sendEventTimeout)
+	defer cancel()
+
+	ch := make(chan sendEventResponse)
+	r.scheduleSendingEvent(ctx, event, ch)
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case response := <-ch:
+		if !response.ok {
+			return NewOKResponseError(response.message)
+		}
+		return nil
+	}
 }
 
-func (r *RelayConnection) Address() domain.RelayAddress {
-	return r.address
+func (r *RelayConnection) scheduleSendingEvent(ctx context.Context, event domain.Event, ch chan sendEventResponse) {
+	r.eventsToSendMutex.Lock()
+	defer r.eventsToSendMutex.Unlock()
+
+	r.eventsToSend[event.Id()] = append(r.eventsToSend[event.Id()], eventToSend{
+		ctx:   ctx,
+		ch:    ch,
+		event: event,
+	})
+
+	go func() {
+		<-ctx.Done()
+		if err := r.removeEventChannel(event, ch); err != nil {
+			panic(err)
+		}
+	}()
+
+	go func() {
+		select {
+		case r.newEventsCh <- event:
+		case <-ctx.Done():
+		}
+	}()
 }
 
-func (r *RelayConnection) removeChannel(chToRemove chan EventOrEndOfSavedEvents) error {
+func (r *RelayConnection) logRunErr(err error) {
+	l := r.logger.Error()
+	if r.errorIsCommonAndShouldNotBeLoggedOnErrorLevel(err) {
+		l = r.logger.Debug()
+	}
+	l.WithError(err).Message("encountered an error")
+}
+
+func (r *RelayConnection) errorIsCommonAndShouldNotBeLoggedOnErrorLevel(err error) bool {
+	if errors.Is(err, DialError{}) {
+		return true
+	}
+
+	if errors.Is(err, ReadMessageError{}) {
+		return true
+	}
+
+	return false
+}
+
+func (r *RelayConnection) removeSubscriptionChannel(chToRemove chan EventOrEndOfSavedEvents) error {
 	r.subscriptionsMutex.Lock()
 	defer r.subscriptionsMutex.Unlock()
 
@@ -143,6 +196,24 @@ func (r *RelayConnection) removeChannel(chToRemove chan EventOrEndOfSavedEvents)
 	}
 
 	return errors.New("somehow the channel was already removed")
+}
+
+func (r *RelayConnection) removeEventChannel(event domain.Event, chToRemove chan sendEventResponse) error {
+	r.eventsToSendMutex.Lock()
+	defer r.eventsToSendMutex.Unlock()
+
+	for i, eventToSend := range r.eventsToSend[event.Id()] {
+		if chToRemove == eventToSend.ch {
+			r.eventsToSend[event.Id()] = append(r.eventsToSend[event.Id()][:i], r.eventsToSend[event.Id()][i+1:]...)
+			if len(r.eventsToSend[event.Id()]) == 0 {
+				delete(r.eventsToSend, event.Id())
+			}
+			return nil
+		}
+	}
+
+	return errors.New("somehow the channel was already removed")
+
 }
 
 func (r *RelayConnection) triggerSubscriptionUpdate() {
@@ -165,9 +236,9 @@ func (r *RelayConnection) run(ctx context.Context) error {
 
 	r.logger.Trace().Message("connecting")
 
-	conn, _, err := websocket.DefaultDialer.DialContext(ctx, r.address.String(), nil)
+	conn, err := NewConnection(ctx, r.address)
 	if err != nil {
-		return NewDialError(err)
+		return errors.Wrap(err, "error creating a connection")
 	}
 
 	r.setState(RelayConnectionStateConnected)
@@ -180,9 +251,13 @@ func (r *RelayConnection) run(ctx context.Context) error {
 		}
 	}()
 
+	if err := r.queueResendingAllEvents(ctx); err != nil {
+		return errors.Wrap(err, "error queueing events")
+	}
+
 	go func() {
 		if err := r.manageSubs(ctx, conn); err != nil {
-			if !errors.Is(err, context.Canceled) && !errors.Is(err, websocket.ErrCloseSent) {
+			if !r.writeErrorShouldNotBeLogged(err) {
 				r.logger.Error().
 					WithError(err).
 					Message("error managing subs")
@@ -190,8 +265,18 @@ func (r *RelayConnection) run(ctx context.Context) error {
 		}
 	}()
 
+	go func() {
+		if err := r.sendNewEvents(ctx, conn); err != nil {
+			if !r.writeErrorShouldNotBeLogged(err) {
+				r.logger.Error().
+					WithError(err).
+					Message("error resending events")
+			}
+		}
+	}()
+
 	for {
-		_, messageBytes, err := conn.ReadMessage()
+		messageBytes, err := conn.ReadMessage()
 		if err != nil {
 			return NewReadMessageError(err)
 		}
@@ -205,6 +290,10 @@ func (r *RelayConnection) run(ctx context.Context) error {
 			continue
 		}
 	}
+}
+
+func (r *RelayConnection) writeErrorShouldNotBeLogged(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, websocket.ErrCloseSent)
 }
 
 func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
@@ -226,7 +315,7 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 		if err != nil {
 			return errors.Wrapf(err, "error creating subscription id from '%s'", string(*v))
 		}
-		r.passValueToChannel(subscriptionID, NewEventOrEndOfSavedEventsWithEOSE())
+		r.passEventOrEOSEToChannel(subscriptionID, NewEventOrEndOfSavedEventsWithEOSE())
 		return nil
 	case *nostr.EventEnvelope:
 		defer r.metrics.ReportMessageReceived(r.address, MessageTypeEvent, &err)
@@ -245,7 +334,7 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 			return errors.Wrap(err, "error creating an event")
 		}
 
-		r.passValueToChannel(subscriptionID, NewEventOrEndOfSavedEventsWithEvent(event))
+		r.passEventOrEOSEToChannel(subscriptionID, NewEventOrEndOfSavedEventsWithEvent(event))
 		return nil
 	case *nostr.NoticeEnvelope:
 		defer r.metrics.ReportMessageReceived(r.address, MessageTypeNotice, &err)
@@ -261,13 +350,32 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 			WithField("message", string(messageBytes)).
 			Message("received a message (auth)")
 		return nil
+	case *nostr.OKEnvelope:
+		defer r.metrics.ReportMessageReceived(r.address, MessageTypeOK, &err)
+		r.logger.
+			Trace().
+			WithField("message", string(messageBytes)).
+			Message("received a message (ok)")
+
+		eventID, err := domain.NewEventId(v.EventID)
+		if err != nil {
+			return errors.Wrap(err, "error creating an event")
+		}
+
+		response := sendEventResponse{
+			ok:      v.OK,
+			message: v.Reason,
+		}
+
+		r.passSendEventResponseToChannel(eventID, response)
+		return nil
 	default:
 		defer r.metrics.ReportMessageReceived(r.address, MessageTypeUnknown, &err)
 		return errors.New("unknown message type")
 	}
 }
 
-func (r *RelayConnection) passValueToChannel(id transport.SubscriptionID, value EventOrEndOfSavedEvents) {
+func (r *RelayConnection) passEventOrEOSEToChannel(id transport.SubscriptionID, value EventOrEndOfSavedEvents) {
 	r.subscriptionsMutex.Lock()
 	defer r.subscriptionsMutex.Unlock()
 
@@ -275,6 +383,18 @@ func (r *RelayConnection) passValueToChannel(id transport.SubscriptionID, value 
 		select {
 		case <-sub.ctx.Done():
 		case sub.ch <- value:
+		}
+	}
+}
+
+func (r *RelayConnection) passSendEventResponseToChannel(eventID domain.EventId, response sendEventResponse) {
+	r.eventsToSendMutex.Lock()
+	defer r.eventsToSendMutex.Unlock()
+
+	for _, eventToSend := range r.eventsToSend[eventID] {
+		select {
+		case <-eventToSend.ctx.Done():
+		case eventToSend.ch <- response:
 		}
 	}
 }
@@ -287,7 +407,7 @@ func (r *RelayConnection) setState(state RelayConnectionState) {
 
 func (r *RelayConnection) manageSubs(
 	ctx context.Context,
-	conn *websocket.Conn,
+	conn *Connection,
 ) error {
 	defer conn.Close()
 
@@ -308,7 +428,7 @@ func (r *RelayConnection) manageSubs(
 }
 
 func (r *RelayConnection) updateSubs(
-	conn *websocket.Conn,
+	conn *Connection,
 	activeSubscriptions *internal.Set[transport.SubscriptionID],
 ) error {
 	r.subscriptionsMutex.Lock()
@@ -319,17 +439,12 @@ func (r *RelayConnection) updateSubs(
 	for _, subscriptionID := range activeSubscriptions.List() {
 		if _, ok := r.subscriptions[subscriptionID]; !ok {
 			msg := transport.NewMessageClose(subscriptionID)
-			msgJSON, err := msg.MarshalJSON()
-			if err != nil {
-				return errors.Wrap(err, "marshaling close message failed")
-			}
 
 			r.logger.Trace().
 				WithField("subscriptionID", subscriptionID).
-				WithField("payload", string(msgJSON)).
 				Message("closing subscription")
 
-			if err := conn.WriteMessage(websocket.TextMessage, msgJSON); err != nil {
+			if err := conn.SendMessage(msg); err != nil {
 				return errors.Wrap(err, "writing close message error")
 			}
 
@@ -340,17 +455,12 @@ func (r *RelayConnection) updateSubs(
 	for subscriptionID, subscription := range r.subscriptions {
 		if ok := activeSubscriptions.Contains(subscriptionID); !ok {
 			msg := transport.NewMessageReq(subscription.id, []domain.Filter{subscription.filter})
-			msgJSON, err := msg.MarshalJSON()
-			if err != nil {
-				return errors.Wrap(err, "marshaling req message failed")
-			}
 
 			r.logger.Trace().
 				WithField("subscriptionID", subscriptionID).
-				WithField("payload", string(msgJSON)).
 				Message("opening subscription")
 
-			if err := conn.WriteMessage(websocket.TextMessage, msgJSON); err != nil {
+			if err := conn.SendMessage(msg); err != nil {
 				return errors.Wrap(err, "writing req message error")
 			}
 
@@ -362,12 +472,58 @@ func (r *RelayConnection) updateSubs(
 	return nil
 }
 
+func (r *RelayConnection) queueResendingAllEvents(ctx context.Context) error {
+	r.eventsToSendMutex.Lock()
+	defer r.eventsToSendMutex.Unlock()
+
+	for _, eventsToSend := range r.eventsToSend {
+		if len(eventsToSend) == 0 {
+			return errors.New("empty list which shouldn't happen as map entries get removed when list is empty")
+		}
+
+		event := eventsToSend[0].event
+		go func() {
+			select {
+			case <-ctx.Done():
+			case r.newEventsCh <- event:
+			}
+		}()
+	}
+
+	return nil
+}
+
+func (r *RelayConnection) sendNewEvents(ctx context.Context, conn *Connection) error {
+	for {
+		select {
+		case event := <-r.newEventsCh:
+			msg := transport.NewMessageEvent(event)
+			if err := conn.SendMessage(msg); err != nil {
+				return errors.Wrap(err, "error writing a message")
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
 type subscription struct {
 	ctx context.Context
 	ch  chan EventOrEndOfSavedEvents
 
 	id     transport.SubscriptionID
 	filter domain.Filter
+}
+
+type eventToSend struct {
+	ctx   context.Context
+	ch    chan sendEventResponse
+	event domain.Event
+}
+
+type sendEventResponse struct {
+	ok      bool
+	message string
 }
 
 type DialError struct {
@@ -414,6 +570,28 @@ func (t ReadMessageError) Is(target error) bool {
 	return ok1 || ok2
 }
 
+type OKResponseError struct {
+	reason string
+}
+
+func NewOKResponseError(reason string) OKResponseError {
+	return OKResponseError{reason: reason}
+}
+
+func (t OKResponseError) Error() string {
+	return fmt.Sprintf("received a false OK response from relay with reason '%s'", t.reason)
+}
+
+func (t OKResponseError) Is(target error) bool {
+	_, ok1 := target.(OKResponseError)
+	_, ok2 := target.(*OKResponseError)
+	return ok1 || ok2
+}
+
+func (t OKResponseError) Reason() string {
+	return t.reason
+}
+
 const (
 	ReconnectionBackoff        = 5 * time.Minute
 	MaxDialReconnectionBackoff = 30 * time.Minute
@@ -447,4 +625,53 @@ func (d *DefaultBackoffManager) dialBackoff(n int) time.Duration {
 
 func (d *DefaultBackoffManager) isDialError(err error) bool {
 	return errors.Is(err, DialError{})
+}
+
+type NostrMessage interface {
+	MarshalJSON() ([]byte, error)
+}
+
+type Connection struct {
+	conn      *websocket.Conn
+	writeLock sync.Mutex
+}
+
+func NewConnection(ctx context.Context, address domain.RelayAddress) (*Connection, error) {
+	conn, _, err := websocket.DefaultDialer.DialContext(ctx, address.String(), nil)
+	if err != nil {
+		return nil, NewDialError(err)
+	}
+
+	return &Connection{
+		conn: conn,
+	}, nil
+}
+
+func (c *Connection) SendMessage(msg NostrMessage) error {
+	msgJSON, err := msg.MarshalJSON()
+	if err != nil {
+		return errors.Wrap(err, "error marshaling message")
+	}
+
+	c.writeLock.Lock()
+	defer c.writeLock.Unlock()
+
+	if err := c.conn.WriteMessage(websocket.TextMessage, msgJSON); err != nil {
+		return errors.Wrap(err, "error writing message")
+	}
+
+	return nil
+}
+
+func (c *Connection) ReadMessage() ([]byte, error) {
+	_, messageBytes, err := c.conn.ReadMessage()
+	if err != nil {
+		return nil, NewReadMessageError(err)
+	}
+
+	return messageBytes, nil
+}
+
+func (c *Connection) Close() error {
+	return c.conn.Close()
 }

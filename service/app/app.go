@@ -5,6 +5,7 @@ import (
 
 	"github.com/boreq/errors"
 	"github.com/planetary-social/nos-event-service/service/domain"
+	"github.com/planetary-social/nos-event-service/service/domain/relays"
 )
 
 var (
@@ -120,4 +121,9 @@ type ContactsExtractor interface {
 
 type Subscriber interface {
 	EventSavedQueueLength(ctx context.Context) (int, error)
+}
+
+type RelayConnections interface {
+	GetEvents(ctx context.Context, relayAddress domain.RelayAddress, filter domain.Filter) (<-chan relays.EventOrEndOfSavedEvents, error)
+	SendEvent(ctx context.Context, relayAddress domain.RelayAddress, event domain.Event) error
 }
