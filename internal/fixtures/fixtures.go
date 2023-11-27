@@ -177,6 +177,10 @@ func SomeRelayAddress() domain.RelayAddress {
 	return v
 }
 
+func SomeEventKind() domain.EventKind {
+	return internal.RandomElement([]domain.EventKind{domain.EventKindNote, domain.EventKindContacts})
+}
+
 func SomeMaybeRelayAddress() domain.MaybeRelayAddress {
 	return domain.NewMaybeRelayAddress(SomeString())
 }

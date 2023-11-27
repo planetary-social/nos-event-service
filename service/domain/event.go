@@ -104,6 +104,19 @@ func (e Event) Tags() []EventTag {
 	return internal.CopySlice(e.tags)
 }
 
+func (e Event) HasInvalidProfileTags() bool {
+	for _, tag := range e.tags {
+		if !tag.IsProfile() {
+			continue
+		}
+
+		if _, err := tag.Profile(); err != nil {
+			return true
+		}
+	}
+	return false
+}
+
 func (e Event) Content() string {
 	return e.content
 }
