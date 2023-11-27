@@ -357,7 +357,7 @@ func (p *TxPubSub) PublishTx(topic string, msg Message) error {
 }
 
 const (
-	maxDefaultMessageErrorBackoff = 6 * time.Hour
+	maxDefaultMessageErrorBackoff = 1 * time.Hour
 	maxDefaultNoMessagesBackoff   = 30 * time.Second
 
 	randomizeMessageErrorBackoffByFraction = 0.1
