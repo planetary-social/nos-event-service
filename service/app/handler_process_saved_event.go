@@ -192,6 +192,10 @@ func (h *ProcessSavedEventHandler) shouldSendEventToRelay(event domain.Event) bo
 		return false
 	}
 
+	if event.HasInvalidProfileTags() {
+		return false
+	}
+
 	return true
 }
 
@@ -200,8 +204,6 @@ func (h *ProcessSavedEventHandler) shouldDisregardSendEventErr(err error) bool {
 	if errors.As(err, &okResponseErr) {
 		switch okResponseErr.Reason() {
 		case "replaced: have newer event":
-			return true
-		case "invalid: uneven size input to from_hex":
 			return true
 		default:
 			return false
