@@ -17,7 +17,7 @@ func NewReceivedEventPubSub() *ReceivedEventPubSub {
 	}
 }
 
-func (m *ReceivedEventPubSub) Publish(relay domain.RelayAddress, event domain.Event) {
+func (m *ReceivedEventPubSub) Publish(relay domain.RelayAddress, event domain.UnverifiedEvent) {
 	m.pubsub.Publish(
 		app.NewReceivedEvent(relay, event),
 	)

@@ -30,7 +30,7 @@ var (
 )
 
 type ReceivedEventPublisher interface {
-	Publish(relay domain.RelayAddress, event domain.Event)
+	Publish(relay domain.RelayAddress, event domain.UnverifiedEvent)
 }
 
 type BootstrapRelaySource interface {

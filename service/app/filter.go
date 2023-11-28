@@ -27,7 +27,7 @@ func NewEventFilter(
 	}
 }
 
-func (f EventFilter) IsOk(event domain.Event) bool {
+func (f EventFilter) IsOk(event Event) bool {
 	if f.filterOlderThan != nil {
 		maxPastAllowed := time.Now().Add(-*f.filterOlderThan)
 		if event.CreatedAt().Before(maxPastAllowed) {
@@ -51,4 +51,13 @@ func (f EventFilter) IsOk(event domain.Event) bool {
 	}
 
 	return true
+}
+
+type Event interface {
+	Id() domain.EventId
+	PubKey() domain.PublicKey
+	CreatedAt() time.Time
+	Kind() domain.EventKind
+	Tags() []domain.EventTag
+	Raw() []byte
 }
