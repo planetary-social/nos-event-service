@@ -108,8 +108,8 @@ func (r *ContactRepository) GetCurrentContactsEvent(ctx context.Context, author 
 	row := r.tx.QueryRow(`
 		SELECT E.payload
 		FROM public_keys PK
-		LEFT JOIN contacts_events CE ON CE.follower_id=PK.id
-		LEFT JOIN events E ON E.id=CE.event_id
+		INNER JOIN contacts_events CE ON CE.follower_id=PK.id
+		INNER JOIN events E ON E.id=CE.event_id
 		WHERE PK.public_key=$1`,
 		author.Hex(),
 	)

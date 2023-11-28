@@ -41,7 +41,7 @@ func TestContactRepository_GetFollowwesReturnsEmptyListWhenThereIsNoData(t *test
 	require.NoError(t, err)
 }
 
-func TestContactRepository_ContactsAreReplacesForGivenPublicKey(t *testing.T) {
+func TestContactRepository_ContactsAreReplacedForGivenPublicKey(t *testing.T) {
 	ctx := fixtures.TestContext(t)
 	adapters := NewTestAdapters(ctx, t)
 
@@ -164,6 +164,47 @@ func TestContactRepository_ContactsAreReplacesForGivenPublicKey(t *testing.T) {
 		slices.SortFunc(followees, cmp)
 		slices.SortFunc(expected, cmp)
 		require.Equal(t, expected, followees)
+
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func TestContactRepository_GrabbingAnEventForFolloweesMeansTheyAreInPublicKeysButNotInContactEventsWhichShouldReturnAKnownError(t *testing.T) {
+	ctx := fixtures.TestContext(t)
+	adapters := NewTestAdapters(ctx, t)
+
+	pk1, sk1 := fixtures.SomeKeyPair()
+	event := fixtures.SomeEventWithAuthor(sk1)
+	followee1 := fixtures.SomePublicKey()
+	followee2 := fixtures.SomePublicKey()
+
+	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.EventRepository.Save(ctx, event)
+		require.NoError(t, err)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.ContactRepository.SetContacts(ctx, event, []domain.PublicKey{followee1, followee2})
+		require.NoError(t, err)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		currentFollowerEvent, err := adapters.ContactRepository.GetCurrentContactsEvent(ctx, pk1)
+		require.NoError(t, err)
+		require.Equal(t, event.Id(), currentFollowerEvent.Id())
+
+		_, err = adapters.ContactRepository.GetCurrentContactsEvent(ctx, followee1)
+		require.ErrorIs(t, err, app.ErrNoContactsEvent)
+
+		_, err = adapters.ContactRepository.GetCurrentContactsEvent(ctx, followee2)
+		require.ErrorIs(t, err, app.ErrNoContactsEvent)
 
 		return nil
 	})
