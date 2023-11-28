@@ -106,10 +106,10 @@ func (r *ContactRepository) SetContacts(ctx context.Context, event domain.Event,
 
 func (r *ContactRepository) GetCurrentContactsEvent(ctx context.Context, author domain.PublicKey) (domain.Event, error) {
 	row := r.tx.QueryRow(`
-		SELECT payload
-		FROM events E
-		LEFT JOIN  contacts_events CE ON CE.event_id=E.id
-		LEFT JOIN  public_keys PK ON PK.id=CE.follower_id
+		SELECT E.payload
+		FROM public_keys PK
+		LEFT JOIN contacts_events CE ON CE.follower_id=PK.id
+		LEFT JOIN events E ON E.id=CE.event_id
 		WHERE PK.public_key=$1`,
 		author.Hex(),
 	)
