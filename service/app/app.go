@@ -33,6 +33,7 @@ type EventRepository interface {
 	// Get returns ErrEventNotFound.
 	Get(ctx context.Context, eventID domain.EventId) (domain.Event, error)
 
+	Exists(ctx context.Context, eventID domain.EventId) (bool, error)
 	Count(ctx context.Context) (int, error)
 }
 

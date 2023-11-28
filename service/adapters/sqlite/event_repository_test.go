@@ -102,3 +102,45 @@ func TestEventRepository_CountCountsSavedEvents(t *testing.T) {
 		require.NoError(t, err)
 	}
 }
+
+func TestEventRepository_ExistsChecksIfEventsExist(t *testing.T) {
+	ctx := fixtures.TestContext(t)
+	adapters := NewTestAdapters(ctx, t)
+
+	event1 := fixtures.SomeEvent()
+	event2 := fixtures.SomeEvent()
+
+	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		ok, err := adapters.EventRepository.Exists(ctx, event1.Id())
+		require.NoError(t, err)
+		require.False(t, ok)
+
+		ok, err = adapters.EventRepository.Exists(ctx, event2.Id())
+		require.NoError(t, err)
+		require.False(t, ok)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.EventRepository.Save(ctx, event1)
+		require.NoError(t, err)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		ok, err := adapters.EventRepository.Exists(ctx, event1.Id())
+		require.NoError(t, err)
+		require.True(t, ok)
+
+		ok, err = adapters.EventRepository.Exists(ctx, event2.Id())
+		require.NoError(t, err)
+		require.False(t, ok)
+
+		return nil
+	})
+	require.NoError(t, err)
+}
