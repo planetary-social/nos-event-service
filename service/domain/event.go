@@ -9,16 +9,55 @@ import (
 	"github.com/planetary-social/nos-event-service/internal"
 )
 
-type Event struct {
-	id        EventId
-	pubKey    PublicKey
-	createdAt time.Time
-	kind      EventKind
-	tags      []EventTag
-	content   string
-	sig       EventSignature
+type UnverifiedEvent struct {
+	event event
+}
 
-	libevent nostr.Event
+func NewUnverifiedEvent(libevent nostr.Event) (UnverifiedEvent, error) {
+	event, err := newEvent(libevent)
+	if err != nil {
+		return UnverifiedEvent{}, errors.Wrap(err, "error creating an event")
+	}
+
+	return UnverifiedEvent{
+		event: event,
+	}, nil
+}
+
+func (u UnverifiedEvent) Id() EventId {
+	return u.event.id
+}
+
+func (u UnverifiedEvent) PubKey() PublicKey {
+	return u.event.pubKey
+}
+
+func (u UnverifiedEvent) CreatedAt() time.Time {
+	return u.event.createdAt
+}
+
+func (u UnverifiedEvent) Kind() EventKind {
+	return u.event.kind
+}
+
+func (u UnverifiedEvent) Tags() []EventTag {
+	return internal.CopySlice(u.event.tags)
+}
+
+func (u UnverifiedEvent) Raw() []byte {
+	j, err := u.event.libevent.MarshalJSON()
+	if err != nil {
+		panic(err)
+	}
+	return j
+}
+
+func (e UnverifiedEvent) String() string {
+	return string(e.Raw())
+}
+
+type Event struct {
+	event event
 }
 
 func NewEventFromRaw(raw []byte) (Event, error) {
@@ -31,7 +70,16 @@ func NewEventFromRaw(raw []byte) (Event, error) {
 }
 
 func NewEvent(libevent nostr.Event) (Event, error) {
-	ok, err := libevent.CheckSignature()
+	unverifiedEvent, err := NewUnverifiedEvent(libevent)
+	if err != nil {
+		return Event{}, errors.Wrap(err, "error creating an unverified event")
+	}
+
+	return NewEventFromUnverifiedEvent(unverifiedEvent)
+}
+
+func NewEventFromUnverifiedEvent(event UnverifiedEvent) (Event, error) {
+	ok, err := event.event.libevent.CheckSignature()
 	if err != nil {
 		return Event{}, errors.Wrap(err, "error checking signature")
 	}
@@ -40,72 +88,31 @@ func NewEvent(libevent nostr.Event) (Event, error) {
 		return Event{}, errors.New("invalid signature")
 	}
 
-	id, err := NewEventIdFromHex(libevent.ID)
-	if err != nil {
-		return Event{}, errors.Wrap(err, "error creating an event id")
-	}
-
-	pubKey, err := NewPublicKeyFromHex(libevent.PubKey)
-	if err != nil {
-		return Event{}, errors.Wrap(err, "error creating a pub key")
-	}
-
-	createdAt := time.Unix(int64(libevent.CreatedAt), 0).UTC()
-
-	kind, err := NewEventKind(libevent.Kind)
-	if err != nil {
-		return Event{}, errors.Wrap(err, "error creating event kind")
-	}
-
-	var tags []EventTag
-	for _, libtag := range libevent.Tags {
-		eventTag, err := NewEventTag(libtag)
-		if err != nil {
-			return Event{}, errors.Wrap(err, "error creating a tag")
-		}
-		tags = append(tags, eventTag)
-	}
-
-	sig, err := NewEventSignature(libevent.Sig)
-	if err != nil {
-		return Event{}, errors.Wrap(err, "error creating a signature")
-	}
-
-	return Event{
-		id:        id,
-		pubKey:    pubKey,
-		createdAt: createdAt,
-		kind:      kind,
-		tags:      tags,
-		content:   libevent.Content,
-		sig:       sig,
-
-		libevent: libevent,
-	}, nil
+	return Event(event), nil
 }
 
 func (e Event) Id() EventId {
-	return e.id
+	return e.event.id
 }
 
 func (e Event) PubKey() PublicKey {
-	return e.pubKey
+	return e.event.pubKey
 }
 
 func (e Event) CreatedAt() time.Time {
-	return e.createdAt
+	return e.event.createdAt
 }
 
 func (e Event) Kind() EventKind {
-	return e.kind
+	return e.event.kind
 }
 
 func (e Event) Tags() []EventTag {
-	return internal.CopySlice(e.tags)
+	return internal.CopySlice(e.event.tags)
 }
 
 func (e Event) HasInvalidProfileTags() bool {
-	for _, tag := range e.tags {
+	for _, tag := range e.event.tags {
 		if !tag.IsProfile() {
 			continue
 		}
@@ -118,23 +125,19 @@ func (e Event) HasInvalidProfileTags() bool {
 }
 
 func (e Event) Content() string {
-	return e.content
-}
-
-func (e Event) Sig() EventSignature {
-	return e.sig
+	return e.event.content
 }
 
 func (e Event) Libevent() nostr.Event {
-	return e.libevent
+	return e.event.libevent
 }
 
 func (e Event) MarshalJSON() ([]byte, error) {
-	return e.libevent.MarshalJSON()
+	return e.event.libevent.MarshalJSON()
 }
 
 func (e Event) Raw() []byte {
-	j, err := e.libevent.MarshalJSON()
+	j, err := e.event.libevent.MarshalJSON()
 	if err != nil {
 		panic(err)
 	}
@@ -143,4 +146,54 @@ func (e Event) Raw() []byte {
 
 func (e Event) String() string {
 	return string(e.Raw())
+}
+
+type event struct {
+	id        EventId
+	pubKey    PublicKey
+	createdAt time.Time
+	kind      EventKind
+	tags      []EventTag
+	content   string
+
+	libevent nostr.Event
+}
+
+func newEvent(libevent nostr.Event) (event, error) {
+	id, err := NewEventIdFromHex(libevent.ID)
+	if err != nil {
+		return event{}, errors.Wrap(err, "error creating an event id")
+	}
+
+	pubKey, err := NewPublicKeyFromHex(libevent.PubKey)
+	if err != nil {
+		return event{}, errors.Wrap(err, "error creating a pub key")
+	}
+
+	createdAt := time.Unix(int64(libevent.CreatedAt), 0).UTC()
+
+	kind, err := NewEventKind(libevent.Kind)
+	if err != nil {
+		return event{}, errors.Wrap(err, "error creating event kind")
+	}
+
+	var tags []EventTag
+	for _, libtag := range libevent.Tags {
+		eventTag, err := NewEventTag(libtag)
+		if err != nil {
+			return event{}, errors.Wrap(err, "error creating a tag")
+		}
+		tags = append(tags, eventTag)
+	}
+
+	return event{
+		id:        id,
+		pubKey:    pubKey,
+		createdAt: createdAt,
+		kind:      kind,
+		tags:      tags,
+		content:   libevent.Content,
+
+		libevent: libevent,
+	}, nil
 }

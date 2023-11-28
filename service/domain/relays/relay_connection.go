@@ -329,7 +329,7 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 			return errors.Wrapf(err, "error creating subscription id from '%s'", *v.SubscriptionID)
 		}
 
-		event, err := domain.NewEvent(v.Event)
+		event, err := domain.NewUnverifiedEvent(v.Event)
 		if err != nil {
 			return errors.Wrap(err, "error creating an event")
 		}

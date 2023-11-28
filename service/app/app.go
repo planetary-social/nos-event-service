@@ -77,10 +77,10 @@ type Application struct {
 
 type ReceivedEvent struct {
 	relay domain.RelayAddress
-	event domain.Event
+	event domain.UnverifiedEvent
 }
 
-func NewReceivedEvent(relay domain.RelayAddress, event domain.Event) ReceivedEvent {
+func NewReceivedEvent(relay domain.RelayAddress, event domain.UnverifiedEvent) ReceivedEvent {
 	return ReceivedEvent{relay: relay, event: event}
 }
 
@@ -88,7 +88,7 @@ func (r ReceivedEvent) Relay() domain.RelayAddress {
 	return r.relay
 }
 
-func (r ReceivedEvent) Event() domain.Event {
+func (r ReceivedEvent) Event() domain.UnverifiedEvent {
 	return r.event
 }
 

@@ -21,10 +21,10 @@ var (
 
 type SaveReceivedEvent struct {
 	relay domain.RelayAddress
-	event domain.Event
+	event domain.UnverifiedEvent
 }
 
-func NewSaveReceivedEvent(relay domain.RelayAddress, event domain.Event) SaveReceivedEvent {
+func NewSaveReceivedEvent(relay domain.RelayAddress, event domain.UnverifiedEvent) SaveReceivedEvent {
 	return SaveReceivedEvent{relay: relay, event: event}
 }
 
@@ -85,11 +85,16 @@ func (h *SaveReceivedEventHandler) Handle(ctx context.Context, cmd SaveReceivedE
 			return nil
 		}
 
-		if err := adapters.Events.Save(ctx, cmd.event); err != nil {
+		event, err := domain.NewEventFromUnverifiedEvent(cmd.event)
+		if err != nil {
+			return errors.Wrap(err, "error checking if event should be downloaded")
+		}
+
+		if err := adapters.Events.Save(ctx, event); err != nil {
 			return errors.Wrap(err, "error saving the event")
 		}
 
-		if err := adapters.Publisher.PublishEventSaved(ctx, cmd.event.Id()); err != nil {
+		if err := adapters.Publisher.PublishEventSaved(ctx, event.Id()); err != nil {
 			return errors.Wrap(err, "error publishing")
 		}
 
@@ -101,7 +106,7 @@ func (h *SaveReceivedEventHandler) Handle(ctx context.Context, cmd SaveReceivedE
 	return nil
 }
 
-func (h *SaveReceivedEventHandler) shouldBeDownloaded(ctx context.Context, adapters Adapters, event domain.Event) (bool, error) {
+func (h *SaveReceivedEventHandler) shouldBeDownloaded(ctx context.Context, adapters Adapters, event domain.UnverifiedEvent) (bool, error) {
 	if h.shouldBeGloballyDownloaded(event.Kind()) {
 		return true, nil
 	}
@@ -127,7 +132,7 @@ func (h *SaveReceivedEventHandler) shouldBeDownloaded(ctx context.Context, adapt
 	return false, nil
 }
 
-func (h *SaveReceivedEventHandler) shouldBeDirectlyMonitored(ctx context.Context, adapters Adapters, event domain.Event) (bool, error) {
+func (h *SaveReceivedEventHandler) shouldBeDirectlyMonitored(ctx context.Context, adapters Adapters, event domain.UnverifiedEvent) (bool, error) {
 	if _, err := adapters.PublicKeysToMonitor.Get(ctx, event.PubKey()); err != nil {
 		if errors.Is(err, ErrPublicKeyToMonitorNotFound) {
 			return false, nil
