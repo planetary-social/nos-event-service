@@ -62,7 +62,7 @@ func (h *SaveReceivedEventHandler) Handle(ctx context.Context, cmd SaveReceivedE
 	}
 
 	if err := h.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
-		exists, err := h.eventAlreadyExists(ctx, adapters, cmd.event)
+		exists, err := adapters.Events.Exists(ctx, cmd.event.Id())
 		if err != nil {
 			return errors.Wrap(err, "error checking if event exists")
 		}
@@ -99,17 +99,6 @@ func (h *SaveReceivedEventHandler) Handle(ctx context.Context, cmd SaveReceivedE
 	}
 
 	return nil
-}
-
-func (h *SaveReceivedEventHandler) eventAlreadyExists(ctx context.Context, adapters Adapters, event domain.Event) (bool, error) {
-	if _, err := adapters.Events.Get(ctx, event.Id()); err != nil {
-		if errors.Is(err, ErrEventNotFound) {
-			return false, nil
-		}
-		return false, errors.Wrap(err, "error checking if event exists")
-	}
-
-	return true, nil
 }
 
 func (h *SaveReceivedEventHandler) shouldBeDownloaded(ctx context.Context, adapters Adapters, event domain.Event) (bool, error) {

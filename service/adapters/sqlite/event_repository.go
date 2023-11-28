@@ -57,6 +57,24 @@ func (r *EventRepository) Count(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+func (r *EventRepository) Exists(ctx context.Context, eventID domain.EventId) (bool, error) {
+	result := r.tx.QueryRow(`
+	SELECT event_id
+	FROM events
+	WHERE event_id=$1`,
+		eventID.Hex(),
+	)
+
+	var tmp string
+	if err := result.Scan(&tmp); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "error scanning")
+	}
+	return true, nil
+}
+
 func (m *EventRepository) readEvent(result *sql.Row) (domain.Event, error) {
 	var payload []byte
 
