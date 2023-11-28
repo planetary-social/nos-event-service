@@ -235,3 +235,51 @@ func TestContactRepository_IsFolloweeOfMonitoredPublicKey(t *testing.T) {
 	})
 	require.NoError(t, err)
 }
+
+func BenchmarkContactRepository_GetCurrentContactsEvent(b *testing.B) {
+	ctx := fixtures.TestContext(b)
+	adapters := NewTestAdapters(ctx, b)
+
+	eventToLookUp := fixtures.SomeEvent()
+
+	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		for i := 0; i < 1000; i++ {
+			event := fixtures.SomeEvent()
+
+			err := adapters.EventRepository.Save(ctx, event)
+			require.NoError(b, err)
+		}
+
+		for i := 0; i < 100; i++ {
+			event := fixtures.SomeEvent()
+
+			err := adapters.EventRepository.Save(ctx, event)
+			require.NoError(b, err)
+
+			err = adapters.ContactRepository.SetContacts(ctx, event, []domain.PublicKey{fixtures.SomePublicKey(), fixtures.SomePublicKey()})
+			require.NoError(b, err)
+		}
+
+		err := adapters.EventRepository.Save(ctx, eventToLookUp)
+		require.NoError(b, err)
+
+		err = adapters.ContactRepository.SetContacts(ctx, eventToLookUp, []domain.PublicKey{fixtures.SomePublicKey(), fixtures.SomePublicKey()})
+		require.NoError(b, err)
+
+		return nil
+	})
+	require.NoError(b, err)
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+			event, err := adapters.ContactRepository.GetCurrentContactsEvent(ctx, eventToLookUp.PubKey())
+			require.NoError(b, err)
+			require.Equal(b, eventToLookUp.Id(), event.Id())
+
+			return nil
+		})
+		require.NoError(b, err)
+	}
+}

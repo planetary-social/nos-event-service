@@ -1,5 +1,5 @@
 .PHONY: ci
-ci: tools test lint generate fmt tidy check_repository_unchanged
+ci: tools test test-bench lint generate fmt tidy check_repository_unchanged
 
 .PHONY: check_repository_unchanged
 check_repository_unchanged: 
@@ -16,6 +16,10 @@ fmt:
 .PHONY: test
 test:
 	go test -race ./...
+
+.PHONY: test-bench
+test-bench:
+	go test -v -race -run="^$$" -bench=. -benchtime=1x ./...
 
 .PHONY: tidy
 tidy:
