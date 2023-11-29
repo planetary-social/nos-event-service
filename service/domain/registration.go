@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/boreq/errors"
 	"github.com/planetary-social/nos-event-service/internal"
@@ -13,6 +14,10 @@ type Registration struct {
 }
 
 func NewRegistrationFromEvent(event Event) (Registration, error) {
+	if event.Kind() != EventKindRegistration {
+		return Registration{}, fmt.Errorf("invalid event kind '%d'", event.Kind().Int())
+	}
+
 	var v registrationContent
 	if err := json.Unmarshal([]byte(event.Content()), &v); err != nil {
 		return Registration{}, errors.Wrap(err, "error unmarshaling content")
@@ -54,10 +59,5 @@ func newRelays(v registrationContent) ([]RelayAddress, error) {
 		}
 		relays = append(relays, address)
 	}
-
-	if len(relays) == 0 {
-		return nil, errors.New("missing relays")
-	}
-
 	return relays, nil
 }
