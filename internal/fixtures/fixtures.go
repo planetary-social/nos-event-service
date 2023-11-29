@@ -13,6 +13,7 @@ import (
 	"github.com/planetary-social/nos-event-service/internal"
 	"github.com/planetary-social/nos-event-service/internal/logging"
 	"github.com/planetary-social/nos-event-service/service/domain"
+	"github.com/stretchr/testify/require"
 )
 
 func SomePublicKey() domain.PublicKey {
@@ -197,4 +198,12 @@ func randSeq(n int) string {
 
 func somePrivateKeyHex() string {
 	return nostr.GeneratePrivateKey()
+}
+
+func RequireEqualEventSlices(tb testing.TB, a, b []domain.Event) {
+	require.Equal(tb, len(a), len(b))
+	for i := 0; i < len(a); i++ {
+		require.Equal(tb, a[i].Id(), b[i].Id())
+		require.Equal(tb, a[i].Raw(), b[i].Raw())
+	}
 }

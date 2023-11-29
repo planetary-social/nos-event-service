@@ -8,3 +8,4 @@ nos-notification-service-*.json
 database.sqlite
 database.sqlite-journal
 run.sh
+_testdata
