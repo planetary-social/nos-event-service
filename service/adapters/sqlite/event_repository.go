@@ -75,10 +75,52 @@ func (r *EventRepository) Exists(ctx context.Context, eventID domain.EventId) (b
 	return true, nil
 }
 
-func (m *EventRepository) readEvent(result *sql.Row) (domain.Event, error) {
+func (r *EventRepository) List(ctx context.Context, after *domain.EventId, limit int) ([]domain.Event, error) {
+	rows, err := r.listQuery(after, limit)
+	if err != nil {
+		return nil, errors.Wrap(err, "error querying")
+	}
+
+	return r.readEvents(rows)
+}
+
+func (r *EventRepository) listQuery(after *domain.EventId, limit int) (*sql.Rows, error) {
+	if after != nil {
+		return r.tx.Query(`
+	SELECT payload
+	FROM events
+	WHERE event_id > $1
+	ORDER BY event_id
+	LIMIT $2`,
+			after.Hex(), limit,
+		)
+	}
+
+	return r.tx.Query(`
+	SELECT payload
+	FROM events
+	ORDER BY event_id
+	LIMIT $1`,
+		limit,
+	)
+}
+
+func (r *EventRepository) readEvents(rows *sql.Rows) ([]domain.Event, error) {
+	var events []domain.Event
+	for rows.Next() {
+		event, err := r.readEvent(rows)
+		if err != nil {
+			return nil, errors.Wrap(err, "error reading an event")
+		}
+		events = append(events, event)
+	}
+	return events, nil
+}
+
+func (m *EventRepository) readEvent(scanner scanner) (domain.Event, error) {
 	var payload []byte
 
-	if err := result.Scan(&payload); err != nil {
+	if err := scanner.Scan(&payload); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domain.Event{}, app.ErrEventNotFound
 		}

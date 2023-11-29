@@ -35,6 +35,8 @@ type EventRepository interface {
 
 	Exists(ctx context.Context, eventID domain.EventId) (bool, error)
 	Count(ctx context.Context) (int, error)
+
+	List(ctx context.Context, after *domain.EventId, limit int) ([]domain.Event, error)
 }
 
 type RelayRepository interface {
@@ -76,6 +78,7 @@ type Application struct {
 	AddPublicKeyToMonitor *AddPublicKeyToMonitorHandler
 	GetEvent              *GetEventHandler
 	GetPublicKeyInfo      *GetPublicKeyInfoHandler
+	GetEvents             *GetEventsHandler
 }
 
 type ReceivedEvent struct {

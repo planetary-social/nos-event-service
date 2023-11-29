@@ -62,7 +62,8 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 func (s *Server) createMux() http.Handler {
 	r := mux.NewRouter()
 	r.Handle("/metrics", promhttp.HandlerFor(s.prometheus.Registry(), promhttp.HandlerOpts{}))
-	r.HandleFunc("/events/{id}", rest.Wrap(s.serveEvents))
+	r.HandleFunc("/events", rest.Wrap(s.serveEvents))
+	r.HandleFunc("/events/{id}", rest.Wrap(s.serveEvent))
 	r.HandleFunc("/public-keys/{hex}", rest.Wrap(s.servePublicKey))
 	r.HandleFunc("/", s.serveWs)
 	return r
@@ -97,6 +98,57 @@ func (s *Server) serveWs(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveEvents(r *http.Request) rest.RestResponse {
+	switch r.Method {
+	case http.MethodGet:
+		var after *domain.EventId
+		if afterString := r.URL.Query().Get("after"); afterString != "" {
+			id, err := domain.NewEventIdFromHex(afterString)
+			if err != nil {
+				return rest.ErrBadRequest.WithMessage("After must be a hex encoded public key.")
+			}
+			after = &id
+		}
+
+		result, err := s.app.GetEvents.Handle(r.Context(), app.NewGetEvents(after))
+		if err != nil {
+			s.logger.Error().WithError(err).Message("error getting events")
+			return rest.ErrInternalServerError
+		}
+
+		response, err := newGetEventsResponse(result)
+		if err != nil {
+			s.logger.Error().WithError(err).Message("error ccreting a response")
+			return rest.ErrInternalServerError
+		}
+
+		return rest.NewResponse(response)
+	default:
+		return rest.ErrMethodNotAllowed
+	}
+}
+
+type getEventsResponse struct {
+	Events            []json.RawMessage `json:"events"`
+	ThereIsMoreEvents bool              `json:"thereIsMoreEvents"`
+}
+
+func newGetEventsResponse(result app.GetEventsResult) (*getEventsResponse, error) {
+	events := make([]json.RawMessage, 0) // avoid sending null in responses
+	for _, event := range result.Events() {
+		eventJSON, err := event.MarshalJSON()
+		if err != nil {
+			return nil, errors.Wrap(err, "error marshaling")
+		}
+		events = append(events, eventJSON)
+	}
+
+	return &getEventsResponse{
+		Events:            events,
+		ThereIsMoreEvents: result.ThereIsMoreEvents(),
+	}, nil
+}
+
+func (s *Server) serveEvent(r *http.Request) rest.RestResponse {
 	switch r.Method {
 	case http.MethodGet:
 		vars := mux.Vars(r)

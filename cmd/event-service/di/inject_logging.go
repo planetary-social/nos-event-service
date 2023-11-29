@@ -5,7 +5,6 @@ import (
 	"github.com/boreq/errors"
 	"github.com/google/wire"
 	"github.com/planetary-social/nos-event-service/internal/logging"
-	"github.com/planetary-social/nos-event-service/service/config"
 	"github.com/sirupsen/logrus"
 )
 
@@ -16,13 +15,13 @@ var loggingSet = wire.NewSet(
 	wire.Bind(new(watermill.LoggerAdapter), new(*logging.WatermillAdapter)),
 )
 
-func newLogger(conf config.Config) (logging.Logger, error) {
-	if conf.LogLevel() == logging.LevelDisabled {
+func newLogger(level logging.Level) (logging.Logger, error) {
+	if level == logging.LevelDisabled {
 		return logging.NewDevNullLogger(), nil
 	}
 
 	v := logrus.New()
-	switch conf.LogLevel() {
+	switch level {
 	case logging.LevelTrace:
 		v.SetLevel(logrus.TraceLevel)
 	case logging.LevelDebug:
