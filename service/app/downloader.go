@@ -241,7 +241,7 @@ func (d *RelayDownloader) downloadSince() *time.Time {
 func (d *RelayDownloader) refreshPublicKeys(ctx context.Context) error {
 	publicKeys, err := d.publicKeySource.GetPublicKeys(ctx)
 	if err != nil {
-		return errors.Wrap(err, "error getting relay addresses")
+		return errors.Wrap(err, "error getting public keys")
 	}
 
 	d.logger.
