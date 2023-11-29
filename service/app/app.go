@@ -51,6 +51,8 @@ type ContactRepository interface {
 	SetContacts(ctx context.Context, event domain.Event, contacts []domain.PublicKey) error
 	GetFollowees(ctx context.Context, publicKey domain.PublicKey) ([]domain.PublicKey, error)
 	IsFolloweeOfMonitoredPublicKey(ctx context.Context, publicKey domain.PublicKey) (bool, error)
+	CountFollowers(ctx context.Context, publicKey domain.PublicKey) (int, error)
+	CountFollowees(ctx context.Context, publicKey domain.PublicKey) (int, error)
 }
 
 type PublicKeysToMonitorRepository interface {
@@ -73,6 +75,7 @@ type Application struct {
 	UpdateMetrics         *UpdateMetricsHandler
 	AddPublicKeyToMonitor *AddPublicKeyToMonitorHandler
 	GetEvent              *GetEventHandler
+	GetPublicKeyInfo      *GetPublicKeyInfoHandler
 }
 
 type ReceivedEvent struct {

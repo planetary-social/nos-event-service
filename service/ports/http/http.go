@@ -63,6 +63,7 @@ func (s *Server) createMux() http.Handler {
 	r := mux.NewRouter()
 	r.Handle("/metrics", promhttp.HandlerFor(s.prometheus.Registry(), promhttp.HandlerOpts{}))
 	r.HandleFunc("/events/{id}", rest.Wrap(s.serveEvents))
+	r.HandleFunc("/public-keys/{hex}", rest.Wrap(s.servePublicKey))
 	r.HandleFunc("/", s.serveWs)
 	return r
 }
@@ -116,18 +117,48 @@ func (s *Server) serveEvents(r *http.Request) rest.RestResponse {
 			return rest.ErrInternalServerError
 		}
 
-		return rest.NewResponse(newGetEventTransport(event))
+		return rest.NewResponse(newGetEventResponse(event))
 	default:
 		return rest.ErrMethodNotAllowed
 	}
 }
 
-type getEventTransport struct {
+type getEventResponse struct {
 	Event json.RawMessage `json:"event"`
 }
 
-func newGetEventTransport(event domain.Event) getEventTransport {
-	return getEventTransport{Event: event.Raw()}
+func newGetEventResponse(event domain.Event) getEventResponse {
+	return getEventResponse{Event: event.Raw()}
+}
+
+func (s *Server) servePublicKey(r *http.Request) rest.RestResponse {
+	vars := mux.Vars(r)
+	hexPublicKeyString := vars["hex"]
+
+	publicKey, err := domain.NewPublicKeyFromHex(hexPublicKeyString)
+	if err != nil {
+		return rest.ErrBadRequest.WithMessage("invalid hex public key")
+	}
+
+	publicKeyInfo, err := s.app.GetPublicKeyInfo.Handle(r.Context(), app.NewGetPublicKeyInfo(publicKey))
+	if err != nil {
+		s.logger.Error().WithError(err).Message("error getting public key info")
+		return rest.ErrInternalServerError
+	}
+
+	return rest.NewResponse(newGetPublicKeyResponse(publicKeyInfo))
+}
+
+type getPublicKeyResponse struct {
+	Followers int `json:"followers"`
+	Followees int `json:"followees"`
+}
+
+func newGetPublicKeyResponse(info app.PublicKeyInfo) *getPublicKeyResponse {
+	return &getPublicKeyResponse{
+		Followers: info.NumberOfFollowers(),
+		Followees: info.NumberOfFollowees(),
+	}
 }
 
 func (s *Server) handleConnection(ctx context.Context, conn *websocket.Conn) error {

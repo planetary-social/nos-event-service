@@ -324,3 +324,122 @@ func BenchmarkContactRepository_GetCurrentContactsEvent(b *testing.B) {
 		require.NoError(b, err)
 	}
 }
+
+func TestContactRepository_CountFolloweesReturnsNumberOfFollowees(t *testing.T) {
+	ctx := fixtures.TestContext(t)
+	adapters := NewTestAdapters(ctx, t)
+
+	pk1, sk1 := fixtures.SomeKeyPair()
+	event1 := fixtures.SomeEventWithAuthor(sk1)
+	followee11 := fixtures.SomePublicKey()
+	followee12 := fixtures.SomePublicKey()
+
+	pk2, sk2 := fixtures.SomeKeyPair()
+	event2 := fixtures.SomeEventWithAuthor(sk2)
+
+	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		n, err := adapters.ContactRepository.CountFollowees(ctx, pk1)
+		require.NoError(t, err)
+		require.Equal(t, 0, n)
+
+		n, err = adapters.ContactRepository.CountFollowees(ctx, pk2)
+		require.NoError(t, err)
+		require.Equal(t, 0, n)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.EventRepository.Save(ctx, event1)
+		require.NoError(t, err)
+
+		err = adapters.EventRepository.Save(ctx, event2)
+		require.NoError(t, err)
+
+		err = adapters.ContactRepository.SetContacts(ctx, event1, []domain.PublicKey{followee11, followee12})
+		require.NoError(t, err)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		n, err := adapters.ContactRepository.CountFollowees(ctx, pk1)
+		require.NoError(t, err)
+		require.Equal(t, 2, n)
+
+		n, err = adapters.ContactRepository.CountFollowees(ctx, pk2)
+		require.NoError(t, err)
+		require.Equal(t, 0, n)
+
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func TestContactRepository_CountFollowersReturnsNumberOfFollowers(t *testing.T) {
+	ctx := fixtures.TestContext(t)
+	adapters := NewTestAdapters(ctx, t)
+
+	_, sk1 := fixtures.SomeKeyPair()
+	event1 := fixtures.SomeEventWithAuthor(sk1)
+
+	_, sk2 := fixtures.SomeKeyPair()
+	event2 := fixtures.SomeEventWithAuthor(sk2)
+
+	followee1 := fixtures.SomePublicKey()
+	followee2 := fixtures.SomePublicKey()
+	followee3 := fixtures.SomePublicKey()
+
+	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		n, err := adapters.ContactRepository.CountFollowers(ctx, followee1)
+		require.NoError(t, err)
+		require.Equal(t, 0, n)
+
+		n, err = adapters.ContactRepository.CountFollowers(ctx, followee2)
+		require.NoError(t, err)
+		require.Equal(t, 0, n)
+
+		n, err = adapters.ContactRepository.CountFollowers(ctx, followee3)
+		require.NoError(t, err)
+		require.Equal(t, 0, n)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.EventRepository.Save(ctx, event1)
+		require.NoError(t, err)
+
+		err = adapters.EventRepository.Save(ctx, event2)
+		require.NoError(t, err)
+
+		err = adapters.ContactRepository.SetContacts(ctx, event1, []domain.PublicKey{followee1, followee2})
+		require.NoError(t, err)
+
+		err = adapters.ContactRepository.SetContacts(ctx, event2, []domain.PublicKey{followee2})
+		require.NoError(t, err)
+
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		n, err := adapters.ContactRepository.CountFollowers(ctx, followee1)
+		require.NoError(t, err)
+		require.Equal(t, 1, n)
+
+		n, err = adapters.ContactRepository.CountFollowers(ctx, followee2)
+		require.NoError(t, err)
+		require.Equal(t, 2, n)
+
+		n, err = adapters.ContactRepository.CountFollowers(ctx, followee3)
+		require.NoError(t, err)
+		require.Equal(t, 0, n)
+
+		return nil
+	})
+	require.NoError(t, err)
+}

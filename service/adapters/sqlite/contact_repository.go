@@ -181,3 +181,37 @@ func (r *ContactRepository) IsFolloweeOfMonitoredPublicKey(ctx context.Context, 
 	return true, nil
 
 }
+
+func (r *ContactRepository) CountFollowers(ctx context.Context, publicKey domain.PublicKey) (int, error) {
+	row := r.tx.QueryRow(`
+		SELECT COUNT(*)
+		FROM contacts_followees CF
+		INNER JOIN public_keys PK ON PK.id=CF.followee_id
+		WHERE PK.public_key=$1`,
+		publicKey.Hex(),
+	)
+
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return 0, errors.Wrap(err, "scan err")
+	}
+
+	return count, nil
+}
+
+func (r *ContactRepository) CountFollowees(ctx context.Context, publicKey domain.PublicKey) (int, error) {
+	row := r.tx.QueryRow(`
+		SELECT COUNT(*)
+		FROM contacts_followees CF
+		INNER JOIN public_keys PK ON PK.id=CF.follower_id
+		WHERE PK.public_key=$1`,
+		publicKey.Hex(),
+	)
+
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return 0, errors.Wrap(err, "scan err")
+	}
+
+	return count, nil
+}
