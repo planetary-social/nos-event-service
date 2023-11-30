@@ -39,7 +39,7 @@ type ProcessSavedEventHandler struct {
 	relaysExtractor        RelaysExtractor
 	contactsExtractor      ContactsExtractor
 	externalEventPublisher ExternalEventPublisher
-	relayConnections       RelayConnections
+	eventSender            EventSender
 	logger                 logging.Logger
 	metrics                Metrics
 }
@@ -49,7 +49,7 @@ func NewProcessSavedEventHandler(
 	relaysExtractor RelaysExtractor,
 	contactsExtractor ContactsExtractor,
 	externalEventPublisher ExternalEventPublisher,
-	relayConnections RelayConnections,
+	eventSender EventSender,
 	logger logging.Logger,
 	metrics Metrics,
 ) *ProcessSavedEventHandler {
@@ -58,7 +58,7 @@ func NewProcessSavedEventHandler(
 		relaysExtractor:        relaysExtractor,
 		contactsExtractor:      contactsExtractor,
 		externalEventPublisher: externalEventPublisher,
-		relayConnections:       relayConnections,
+		eventSender:            eventSender,
 		logger:                 logger.New("processSavedEventHandler"),
 		metrics:                metrics,
 	}
@@ -165,12 +165,12 @@ func (h *ProcessSavedEventHandler) shouldReplaceContacts(ctx context.Context, ad
 }
 
 func (h *ProcessSavedEventHandler) maybeSendEventToRelay(ctx context.Context, event domain.Event) (err error) {
-	if !h.shouldSendEventToRelay(event) {
+	if !ShouldSendEventToRelay(event) {
 		h.metrics.ReportEventSentToRelay(nosRelayAddress, SendEventToRelayDecisionIgnore, SendEventToRelayResultSuccess)
 		return nil
 	}
 
-	if err := h.relayConnections.SendEvent(ctx, nosRelayAddress, event); err != nil {
+	if err := h.eventSender.SendEvent(ctx, nosRelayAddress, event); err != nil {
 		if h.shouldDisregardSendEventErr(err) {
 			h.metrics.ReportEventSentToRelay(nosRelayAddress, SendEventToRelayDecisionSend, SendEventToRelayResultIgnoreError)
 			return nil
@@ -183,7 +183,11 @@ func (h *ProcessSavedEventHandler) maybeSendEventToRelay(ctx context.Context, ev
 	return nil
 }
 
-func (h *ProcessSavedEventHandler) shouldSendEventToRelay(event domain.Event) bool {
+func (h *ProcessSavedEventHandler) shouldDisregardSendEventErr(err error) bool {
+	return errors.Is(err, relays.ErrEventReplaced)
+}
+
+func ShouldSendEventToRelay(event Event) bool {
 	if !eventKindsWhichShouldBeSentToRelay.Contains(event.Kind()) {
 		return false
 	}
@@ -197,18 +201,4 @@ func (h *ProcessSavedEventHandler) shouldSendEventToRelay(event domain.Event) bo
 	}
 
 	return true
-}
-
-func (h *ProcessSavedEventHandler) shouldDisregardSendEventErr(err error) bool {
-	var okResponseErr relays.OKResponseError
-	if errors.As(err, &okResponseErr) {
-		switch okResponseErr.Reason() {
-		case "replaced: have newer event":
-			return true
-		default:
-			return false
-		}
-	}
-
-	return false
 }

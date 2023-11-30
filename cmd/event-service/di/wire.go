@@ -146,6 +146,9 @@ var downloaderSet = wire.NewSet(
 
 	app.NewDatabasePublicKeySource,
 	wire.Bind(new(app.PublicKeySource), new(*app.DatabasePublicKeySource)),
+
+	relays.NewEventSender,
+	wire.Bind(new(app.EventSender), new(*relays.EventSender)),
 )
 
 var domainSet = wire.NewSet(

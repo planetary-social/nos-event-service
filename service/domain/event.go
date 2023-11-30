@@ -10,11 +10,22 @@ import (
 )
 
 type UnverifiedEvent struct {
-	event event
+	event parsedEvent
 }
 
 func NewUnverifiedEvent(libevent nostr.Event) (UnverifiedEvent, error) {
-	event, err := newEvent(libevent)
+	event, err := newParsedEvent(libevent)
+	if err != nil {
+		return UnverifiedEvent{}, errors.Wrap(err, "error creating an event")
+	}
+
+	return UnverifiedEvent{
+		event: event,
+	}, nil
+}
+
+func NewUnverifiedEventFromRaw(raw []byte) (UnverifiedEvent, error) {
+	event, err := newParsedEventFromRaw(raw)
 	if err != nil {
 		return UnverifiedEvent{}, errors.Wrap(err, "error creating an event")
 	}
@@ -44,6 +55,10 @@ func (u UnverifiedEvent) Tags() []EventTag {
 	return internal.CopySlice(u.event.tags)
 }
 
+func (u UnverifiedEvent) HasInvalidProfileTags() bool {
+	return u.event.HasInvalidProfileTags()
+}
+
 func (u UnverifiedEvent) Raw() []byte {
 	j, err := u.event.libevent.MarshalJSON()
 	if err != nil {
@@ -52,34 +67,36 @@ func (u UnverifiedEvent) Raw() []byte {
 	return j
 }
 
-func (e UnverifiedEvent) String() string {
-	return string(e.Raw())
+func (u UnverifiedEvent) String() string {
+	return string(u.Raw())
 }
 
 type Event struct {
-	event event
+	event parsedEvent
 }
 
 func NewEventFromRaw(raw []byte) (Event, error) {
-	var libevent nostr.Event
-	if err := json.Unmarshal(raw, &libevent); err != nil {
-		return Event{}, errors.Wrap(err, "error unmarshaling")
-
+	parsedEvent, err := newParsedEventFromRaw(raw)
+	if err != nil {
+		return Event{}, errors.Wrap(err, "error creating a parsed event")
 	}
-	return NewEvent(libevent)
+	return newEventFromParsedEvent(parsedEvent)
 }
 
 func NewEvent(libevent nostr.Event) (Event, error) {
-	unverifiedEvent, err := NewUnverifiedEvent(libevent)
+	parsedEvent, err := newParsedEvent(libevent)
 	if err != nil {
-		return Event{}, errors.Wrap(err, "error creating an unverified event")
+		return Event{}, errors.Wrap(err, "error creating a parsed event")
 	}
-
-	return NewEventFromUnverifiedEvent(unverifiedEvent)
+	return newEventFromParsedEvent(parsedEvent)
 }
 
 func NewEventFromUnverifiedEvent(event UnverifiedEvent) (Event, error) {
-	ok, err := event.event.libevent.CheckSignature()
+	return newEventFromParsedEvent(event.event)
+}
+
+func newEventFromParsedEvent(event parsedEvent) (Event, error) {
+	ok, err := event.libevent.CheckSignature()
 	if err != nil {
 		return Event{}, errors.Wrap(err, "error checking signature")
 	}
@@ -88,7 +105,7 @@ func NewEventFromUnverifiedEvent(event UnverifiedEvent) (Event, error) {
 		return Event{}, errors.New("invalid signature")
 	}
 
-	return Event(event), nil
+	return Event{event: event}, nil
 }
 
 func (e Event) Id() EventId {
@@ -112,16 +129,7 @@ func (e Event) Tags() []EventTag {
 }
 
 func (e Event) HasInvalidProfileTags() bool {
-	for _, tag := range e.event.tags {
-		if !tag.IsProfile() {
-			continue
-		}
-
-		if _, err := tag.Profile(); err != nil {
-			return true
-		}
-	}
-	return false
+	return e.event.HasInvalidProfileTags()
 }
 
 func (e Event) Content() string {
@@ -148,7 +156,7 @@ func (e Event) String() string {
 	return string(e.Raw())
 }
 
-type event struct {
+type parsedEvent struct {
 	id        EventId
 	pubKey    PublicKey
 	createdAt time.Time
@@ -159,34 +167,42 @@ type event struct {
 	libevent nostr.Event
 }
 
-func newEvent(libevent nostr.Event) (event, error) {
+func newParsedEventFromRaw(raw []byte) (parsedEvent, error) {
+	var libevent nostr.Event
+	if err := json.Unmarshal(raw, &libevent); err != nil {
+		return parsedEvent{}, errors.Wrap(err, "error unmarshaling")
+	}
+	return newParsedEvent(libevent)
+}
+
+func newParsedEvent(libevent nostr.Event) (parsedEvent, error) {
 	id, err := NewEventIdFromHex(libevent.ID)
 	if err != nil {
-		return event{}, errors.Wrap(err, "error creating an event id")
+		return parsedEvent{}, errors.Wrap(err, "error creating an event id")
 	}
 
 	pubKey, err := NewPublicKeyFromHex(libevent.PubKey)
 	if err != nil {
-		return event{}, errors.Wrap(err, "error creating a pub key")
+		return parsedEvent{}, errors.Wrap(err, "error creating a pub key")
 	}
 
 	createdAt := time.Unix(int64(libevent.CreatedAt), 0).UTC()
 
 	kind, err := NewEventKind(libevent.Kind)
 	if err != nil {
-		return event{}, errors.Wrap(err, "error creating event kind")
+		return parsedEvent{}, errors.Wrap(err, "error creating event kind")
 	}
 
 	var tags []EventTag
 	for _, libtag := range libevent.Tags {
 		eventTag, err := NewEventTag(libtag)
 		if err != nil {
-			return event{}, errors.Wrap(err, "error creating a tag")
+			return parsedEvent{}, errors.Wrap(err, "error creating a tag")
 		}
 		tags = append(tags, eventTag)
 	}
 
-	return event{
+	return parsedEvent{
 		id:        id,
 		pubKey:    pubKey,
 		createdAt: createdAt,
@@ -196,4 +212,17 @@ func newEvent(libevent nostr.Event) (event, error) {
 
 		libevent: libevent,
 	}, nil
+}
+
+func (e parsedEvent) HasInvalidProfileTags() bool {
+	for _, tag := range e.tags {
+		if !tag.IsProfile() {
+			continue
+		}
+
+		if _, err := tag.Profile(); err != nil {
+			return true
+		}
+	}
+	return false
 }
