@@ -6,7 +6,6 @@ import (
 
 	"github.com/boreq/errors"
 	"github.com/planetary-social/nos-event-service/service/domain"
-	"github.com/planetary-social/nos-event-service/service/domain/relays"
 )
 
 var (
@@ -139,8 +138,8 @@ type Subscriber interface {
 	EventSavedOldestMessageAge(ctx context.Context) (time.Duration, error)
 }
 
-type RelayConnections interface {
-	GetEvents(ctx context.Context, relayAddress domain.RelayAddress, filter domain.Filter) (<-chan relays.EventOrEndOfSavedEvents, error)
+type EventSender interface {
+	// SendEvent returns relays.ErrEventReplaced.
 	SendEvent(ctx context.Context, relayAddress domain.RelayAddress, event domain.Event) error
 }
 

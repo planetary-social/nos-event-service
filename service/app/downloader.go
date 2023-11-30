@@ -10,6 +10,7 @@ import (
 	"github.com/planetary-social/nos-event-service/internal"
 	"github.com/planetary-social/nos-event-service/internal/logging"
 	"github.com/planetary-social/nos-event-service/service/domain"
+	"github.com/planetary-social/nos-event-service/service/domain/relays"
 )
 
 const (
@@ -28,6 +29,10 @@ var (
 		domain.EventKindRelayListMetadata,
 	}
 )
+
+type RelayConnections interface {
+	GetEvents(ctx context.Context, relayAddress domain.RelayAddress, filter domain.Filter) (<-chan relays.EventOrEndOfSavedEvents, error)
+}
 
 type ReceivedEventPublisher interface {
 	Publish(relay domain.RelayAddress, event domain.UnverifiedEvent)

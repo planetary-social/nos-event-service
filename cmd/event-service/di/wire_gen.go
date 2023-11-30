@@ -65,7 +65,8 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 		return Service{}, nil, err
 	}
 	relayConnections := relays.NewRelayConnections(contextContext, logger, prometheusPrometheus)
-	processSavedEventHandler := app.NewProcessSavedEventHandler(genericTransactionProvider, relaysExtractor, contactsExtractor, externalEventPublisher, relayConnections, logger, prometheusPrometheus)
+	eventSender := relays.NewEventSender(relayConnections)
+	processSavedEventHandler := app.NewProcessSavedEventHandler(genericTransactionProvider, relaysExtractor, contactsExtractor, externalEventPublisher, eventSender, logger, prometheusPrometheus)
 	sqliteGenericTransactionProvider := sqlite.NewPubSubTxTransactionProvider(db, databaseMutex)
 	pubSub := sqlite.NewPubSub(sqliteGenericTransactionProvider, logger)
 	subscriber := sqlite.NewSubscriber(pubSub, db)
@@ -258,6 +259,6 @@ type buildTransactionSqliteAdaptersDependencies struct {
 	Logger logging.Logger
 }
 
-var downloaderSet = wire.NewSet(app.NewRelayDownloaderFactory, app.NewDownloader, relays.NewBootstrapRelaySource, wire.Bind(new(app.BootstrapRelaySource), new(*relays.BootstrapRelaySource)), app.NewDatabaseRelaySource, wire.Bind(new(app.RelaySource), new(*app.DatabaseRelaySource)), relays.NewRelayConnections, wire.Bind(new(app.RelayConnections), new(*relays.RelayConnections)), app.NewDatabasePublicKeySource, wire.Bind(new(app.PublicKeySource), new(*app.DatabasePublicKeySource)))
+var downloaderSet = wire.NewSet(app.NewRelayDownloaderFactory, app.NewDownloader, relays.NewBootstrapRelaySource, wire.Bind(new(app.BootstrapRelaySource), new(*relays.BootstrapRelaySource)), app.NewDatabaseRelaySource, wire.Bind(new(app.RelaySource), new(*app.DatabaseRelaySource)), relays.NewRelayConnections, wire.Bind(new(app.RelayConnections), new(*relays.RelayConnections)), app.NewDatabasePublicKeySource, wire.Bind(new(app.PublicKeySource), new(*app.DatabasePublicKeySource)), relays.NewEventSender, wire.Bind(new(app.EventSender), new(*relays.EventSender)))
 
 var domainSet = wire.NewSet(domain.NewRelaysExtractor, wire.Bind(new(app.RelaysExtractor), new(*domain.RelaysExtractor)), domain.NewContactsExtractor, wire.Bind(new(app.ContactsExtractor), new(*domain.ContactsExtractor)))
