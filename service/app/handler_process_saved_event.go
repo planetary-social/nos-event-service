@@ -26,6 +26,8 @@ var (
 	)
 )
 
+const sendEventToRelayTimeout = 5 * time.Second
+
 type ProcessSavedEvent struct {
 	id domain.EventId
 }
@@ -165,6 +167,9 @@ func (h *ProcessSavedEventHandler) shouldReplaceContacts(ctx context.Context, ad
 }
 
 func (h *ProcessSavedEventHandler) maybeSendEventToRelay(ctx context.Context, event domain.Event) (err error) {
+	ctx, cancel := context.WithTimeout(ctx, sendEventToRelayTimeout)
+	defer cancel()
+
 	if !ShouldSendEventToRelay(event) {
 		h.metrics.ReportEventSentToRelay(nosRelayAddress, SendEventToRelayDecisionIgnore, SendEventToRelayResultSuccess)
 		return nil
