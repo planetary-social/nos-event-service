@@ -103,8 +103,6 @@ type ReceivedEventSubscriber interface {
 
 type Metrics interface {
 	StartApplicationCall(handlerName string) ApplicationCall
-	ReportNumberOfRelayDownloaders(n int)
-	ReportReceivedEvent(address domain.RelayAddress)
 	ReportQueueLength(topic string, n int)
 	ReportQueueOldestMessageAge(topic string, age time.Duration)
 	ReportNumberOfStoredRelayAddresses(n int)

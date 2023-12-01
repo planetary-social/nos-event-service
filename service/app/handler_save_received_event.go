@@ -8,6 +8,7 @@ import (
 	"github.com/planetary-social/nos-event-service/internal"
 	"github.com/planetary-social/nos-event-service/internal/logging"
 	"github.com/planetary-social/nos-event-service/service/domain"
+	"github.com/planetary-social/nos-event-service/service/domain/downloader"
 )
 
 var (
@@ -107,7 +108,7 @@ func (h *SaveReceivedEventHandler) Handle(ctx context.Context, cmd SaveReceivedE
 }
 
 func (h *SaveReceivedEventHandler) shouldBeDownloaded(ctx context.Context, adapters Adapters, event domain.UnverifiedEvent) (bool, error) {
-	if h.shouldBeGloballyDownloaded(event.Kind()) {
+	if downloader.IsGlobalEventKindToDownload(event.Kind()) {
 		return true, nil
 	}
 
@@ -141,13 +142,4 @@ func (h *SaveReceivedEventHandler) shouldBeDirectlyMonitored(ctx context.Context
 	}
 
 	return true, nil
-}
-
-func (h *SaveReceivedEventHandler) shouldBeGloballyDownloaded(kind domain.EventKind) bool {
-	for _, v := range globalEventKindsToDownload {
-		if v == kind {
-			return true
-		}
-	}
-	return false
 }

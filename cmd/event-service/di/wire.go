@@ -16,6 +16,7 @@ import (
 	"github.com/planetary-social/nos-event-service/service/app"
 	"github.com/planetary-social/nos-event-service/service/config"
 	"github.com/planetary-social/nos-event-service/service/domain"
+	"github.com/planetary-social/nos-event-service/service/domain/downloader"
 	"github.com/planetary-social/nos-event-service/service/domain/relays"
 )
 
@@ -132,20 +133,20 @@ func buildTestTransactionSqliteAdapters(*sql.DB, *sql.Tx, buildTransactionSqlite
 }
 
 var downloaderSet = wire.NewSet(
-	app.NewRelayDownloaderFactory,
-	app.NewDownloader,
+	downloader.NewRelayDownloaderFactory,
+	downloader.NewDownloader,
 
 	relays.NewBootstrapRelaySource,
-	wire.Bind(new(app.BootstrapRelaySource), new(*relays.BootstrapRelaySource)),
+	wire.Bind(new(downloader.BootstrapRelaySource), new(*relays.BootstrapRelaySource)),
 
 	app.NewDatabaseRelaySource,
-	wire.Bind(new(app.RelaySource), new(*app.DatabaseRelaySource)),
+	wire.Bind(new(downloader.RelaySource), new(*app.DatabaseRelaySource)),
 
 	relays.NewRelayConnections,
-	wire.Bind(new(app.RelayConnections), new(*relays.RelayConnections)),
+	wire.Bind(new(downloader.RelayConnections), new(*relays.RelayConnections)),
 
 	app.NewDatabasePublicKeySource,
-	wire.Bind(new(app.PublicKeySource), new(*app.DatabasePublicKeySource)),
+	wire.Bind(new(downloader.PublicKeySource), new(*app.DatabasePublicKeySource)),
 
 	relays.NewEventSender,
 	wire.Bind(new(app.EventSender), new(*relays.EventSender)),

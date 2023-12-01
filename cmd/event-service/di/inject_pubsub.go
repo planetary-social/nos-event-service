@@ -9,12 +9,13 @@ import (
 	"github.com/planetary-social/nos-event-service/service/adapters/sqlite"
 	"github.com/planetary-social/nos-event-service/service/app"
 	"github.com/planetary-social/nos-event-service/service/config"
+	"github.com/planetary-social/nos-event-service/service/domain/downloader"
 	"github.com/planetary-social/nos-event-service/service/ports/sqlitepubsub"
 )
 
 var memoryPubsubSet = wire.NewSet(
 	memorypubsub.NewReceivedEventPubSub,
-	wire.Bind(new(app.ReceivedEventPublisher), new(*memorypubsub.ReceivedEventPubSub)),
+	wire.Bind(new(downloader.ReceivedEventPublisher), new(*memorypubsub.ReceivedEventPubSub)),
 	wire.Bind(new(app.ReceivedEventSubscriber), new(*memorypubsub.ReceivedEventPubSub)),
 )
 
