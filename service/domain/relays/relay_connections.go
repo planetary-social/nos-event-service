@@ -100,7 +100,8 @@ func (r *RelayConnections) getConnection(relayAddress domain.RelayAddress) *Rela
 		return connection
 	}
 
-	connection := NewRelayConnection(relayAddress, r.logger, r.metrics)
+	factory := NewWebsocketConnectionFactory(relayAddress)
+	connection := NewRelayConnection(factory, r.logger, r.metrics)
 	go connection.Run(r.longCtx)
 
 	r.connections[relayAddress] = connection

@@ -200,8 +200,8 @@ func TestPubSub_QueueLengthReportsNumberOfElementsInQueue(t *testing.T) {
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		n, err = adapters.PubSub.QueueLength(ctx, topic)
-		assert.NoError(t, err)
-		assert.Equal(t, 1, n)
+		assert.NoError(collect, err)
+		assert.Equal(collect, 1, n)
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
@@ -232,8 +232,8 @@ func TestPubSub_OldestMessageAgeReportsOldestMessageAge(t *testing.T) {
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		age, err := adapters.PubSub.OldestMessageAge(ctx, topic)
-		assert.NoError(t, err)
-		assert.Greater(t, age.Seconds(), float64(0))
+		assert.NoError(collect, err)
+		assert.Greater(collect, age.Seconds(), float64(0))
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
