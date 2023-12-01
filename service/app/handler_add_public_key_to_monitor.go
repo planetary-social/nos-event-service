@@ -38,6 +38,9 @@ func NewAddPublicKeyToMonitorHandler(
 func (h *AddPublicKeyToMonitorHandler) Handle(ctx context.Context, cmd AddPublicKeyToMonitor) (err error) {
 	defer h.metrics.StartApplicationCall("addPublicKeyToMonitor").End(&err)
 
+	ctx, cancel := context.WithTimeout(ctx, applicationHandlerTimeout)
+	defer cancel()
+
 	publicKeyToMonitor, err := domain.NewPublicKeyToMonitor(
 		cmd.publicKey,
 		time.Now(),

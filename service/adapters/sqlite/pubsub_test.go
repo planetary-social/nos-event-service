@@ -37,7 +37,7 @@ func TestPubSub_PublishingMessagesWithIdenticalUUIDsReturnsAnError(t *testing.T)
 	require.NoError(t, err)
 
 	err = adapters.PubSub.Publish(ctx, fixtures.SomeString(), msg)
-	require.EqualError(t, err, "transaction error: error calling the provided function: UNIQUE constraint failed: pubsub.uuid")
+	require.EqualError(t, err, "transaction error: received an error: error calling the callback: error calling the adapters callback: UNIQUE constraint failed: pubsub.uuid")
 }
 
 func TestPubSub_NackedMessagesAreRetried(t *testing.T) {

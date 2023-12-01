@@ -50,6 +50,9 @@ func NewSaveReceivedEventHandler(
 func (h *SaveReceivedEventHandler) Handle(ctx context.Context, cmd SaveReceivedEvent) (err error) {
 	defer h.metrics.StartApplicationCall("saveReceivedEvent").End(&err)
 
+	ctx, cancel := context.WithTimeout(ctx, applicationHandlerTimeout)
+	defer cancel()
+
 	h.logger.
 		Trace().
 		WithField("relay", cmd.relay.String()).

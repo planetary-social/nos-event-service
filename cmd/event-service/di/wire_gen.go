@@ -48,8 +48,8 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 		Logger: logger,
 	}
 	genericAdaptersFactoryFn := newAdaptersFactoryFn(diBuildTransactionSqliteAdaptersDependencies)
-	databaseMutex := sqlite.NewDatabaseMutex()
-	genericTransactionProvider := sqlite.NewTransactionProvider(db, genericAdaptersFactoryFn, databaseMutex)
+	transactionRunner := sqlite.NewTransactionRunner(db)
+	genericTransactionProvider := sqlite.NewTransactionProvider(db, genericAdaptersFactoryFn, transactionRunner)
 	prometheusPrometheus, err := prometheus.NewPrometheus(logger)
 	if err != nil {
 		cleanup()
@@ -68,7 +68,7 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	relayConnections := relays.NewRelayConnections(contextContext, logger, prometheusPrometheus)
 	eventSender := relays.NewEventSender(relayConnections)
 	processSavedEventHandler := app.NewProcessSavedEventHandler(genericTransactionProvider, relaysExtractor, contactsExtractor, externalEventPublisher, eventSender, logger, prometheusPrometheus)
-	sqliteGenericTransactionProvider := sqlite.NewPubSubTxTransactionProvider(db, databaseMutex)
+	sqliteGenericTransactionProvider := sqlite.NewPubSubTxTransactionProvider(db, transactionRunner)
 	pubSub := sqlite.NewPubSub(sqliteGenericTransactionProvider, logger)
 	subscriber := sqlite.NewSubscriber(pubSub, db)
 	updateMetricsHandler := app.NewUpdateMetricsHandler(genericTransactionProvider, subscriber, logger, prometheusPrometheus)
@@ -108,7 +108,7 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 		return Service{}, nil, err
 	}
 	loggingMigrationsProgressCallback := adapters.NewLoggingMigrationsProgressCallback(logger)
-	service := NewService(application, server, downloaderDownloader, receivedEventSubscriber, eventSavedEventSubscriber, metrics, runner, migrationsMigrations, loggingMigrationsProgressCallback)
+	service := NewService(application, server, downloaderDownloader, receivedEventSubscriber, eventSavedEventSubscriber, metrics, transactionRunner, runner, migrationsMigrations, loggingMigrationsProgressCallback)
 	return service, func() {
 		cleanup()
 	}, nil
@@ -132,9 +132,9 @@ func BuildTestAdapters(contextContext context.Context, tb testing.TB) (sqlite.Te
 		Logger: logger,
 	}
 	genericAdaptersFactoryFn := newTestAdaptersFactoryFn(diBuildTransactionSqliteAdaptersDependencies)
-	databaseMutex := sqlite.NewDatabaseMutex()
-	genericTransactionProvider := sqlite.NewTestTransactionProvider(db, genericAdaptersFactoryFn, databaseMutex)
-	sqliteGenericTransactionProvider := sqlite.NewPubSubTxTransactionProvider(db, databaseMutex)
+	transactionRunner := sqlite.NewTransactionRunner(db)
+	genericTransactionProvider := sqlite.NewTestTransactionProvider(db, genericAdaptersFactoryFn, transactionRunner)
+	sqliteGenericTransactionProvider := sqlite.NewPubSubTxTransactionProvider(db, transactionRunner)
 	pubSub := sqlite.NewPubSub(sqliteGenericTransactionProvider, logger)
 	subscriber := sqlite.NewSubscriber(pubSub, db)
 	migrationsStorage, err := sqlite.NewMigrationsStorage(db)
@@ -158,6 +158,7 @@ func BuildTestAdapters(contextContext context.Context, tb testing.TB) (sqlite.Te
 		MigrationsRunner:           runner,
 		Migrations:                 migrationsMigrations,
 		MigrationsProgressCallback: loggingMigrationsProgressCallback,
+		TransactionRunner:          transactionRunner,
 	}
 	return testedItems, func() {
 		cleanup()

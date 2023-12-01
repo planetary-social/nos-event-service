@@ -69,6 +69,9 @@ func NewProcessSavedEventHandler(
 func (h *ProcessSavedEventHandler) Handle(ctx context.Context, cmd ProcessSavedEvent) (err error) {
 	defer h.metrics.StartApplicationCall("processSavedEvent").End(&err)
 
+	ctx, cancel := context.WithTimeout(ctx, applicationHandlerTimeout)
+	defer cancel()
+
 	event, err := h.loadEvent(ctx, cmd.id)
 	if err != nil {
 		return errors.Wrap(err, "error loading the event")
