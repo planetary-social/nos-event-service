@@ -31,6 +31,9 @@ func NewUpdateMetricsHandler(
 func (h *UpdateMetricsHandler) Handle(ctx context.Context) (err error) {
 	defer h.metrics.StartApplicationCall("updateMetrics").End(&err)
 
+	ctx, cancel := context.WithTimeout(ctx, applicationHandlerTimeout)
+	defer cancel()
+
 	n, err := h.subscriber.EventSavedQueueLength(ctx)
 	if err != nil {
 		return errors.Wrap(err, "error reading queue length")

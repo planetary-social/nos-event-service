@@ -6,6 +6,7 @@ import (
 	"github.com/boreq/errors"
 	"github.com/hashicorp/go-multierror"
 	"github.com/planetary-social/nos-event-service/internal/migrations"
+	"github.com/planetary-social/nos-event-service/service/adapters/sqlite"
 	"github.com/planetary-social/nos-event-service/service/app"
 	"github.com/planetary-social/nos-event-service/service/domain/downloader"
 	"github.com/planetary-social/nos-event-service/service/ports/http"
@@ -21,6 +22,7 @@ type Service struct {
 	receivedEventSubscriber    *memorypubsub.ReceivedEventSubscriber
 	eventSavedEventSubscriber  *sqlitepubsub.EventSavedEventSubscriber
 	metricsTimer               *timer.Metrics
+	transactionRunner          *sqlite.TransactionRunner
 	migrationsRunner           *migrations.Runner
 	migrations                 migrations.Migrations
 	migrationsProgressCallback migrations.ProgressCallback
@@ -33,6 +35,7 @@ func NewService(
 	receivedEventSubscriber *memorypubsub.ReceivedEventSubscriber,
 	eventSavedEventSubscriber *sqlitepubsub.EventSavedEventSubscriber,
 	metricsTimer *timer.Metrics,
+	transactionRunner *sqlite.TransactionRunner,
 	migrationsRunner *migrations.Runner,
 	migrations migrations.Migrations,
 	migrationsProgressCallback migrations.ProgressCallback,
@@ -44,6 +47,7 @@ func NewService(
 		receivedEventSubscriber:    receivedEventSubscriber,
 		eventSavedEventSubscriber:  eventSavedEventSubscriber,
 		metricsTimer:               metricsTimer,
+		transactionRunner:          transactionRunner,
 		migrationsRunner:           migrationsRunner,
 		migrations:                 migrations,
 		migrationsProgressCallback: migrationsProgressCallback,
@@ -88,6 +92,11 @@ func (s Service) Run(ctx context.Context) error {
 	runners++
 	go func() {
 		errCh <- errors.Wrap(s.metricsTimer.Run(ctx), "metrics timer error")
+	}()
+
+	runners++
+	go func() {
+		errCh <- errors.Wrap(s.transactionRunner.Run(ctx), "transaction runner error")
 	}()
 
 	var err error

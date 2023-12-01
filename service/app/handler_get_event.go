@@ -37,6 +37,9 @@ func NewGetEventHandler(
 func (h *GetEventHandler) Handle(ctx context.Context, cmd GetEvent) (event domain.Event, err error) {
 	defer h.metrics.StartApplicationCall("getEvent").End(&err)
 
+	ctx, cancel := context.WithTimeout(ctx, applicationHandlerTimeout)
+	defer cancel()
+
 	if err := h.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
 		tmp, err := adapters.Events.Get(ctx, cmd.id)
 		if err != nil {

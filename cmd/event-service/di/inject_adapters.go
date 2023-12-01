@@ -16,7 +16,7 @@ import (
 
 var sqliteAdaptersSet = wire.NewSet(
 	newSqliteDB,
-	sqlite.NewDatabaseMutex,
+	sqlite.NewTransactionRunner,
 
 	sqlite.NewTransactionProvider,
 	wire.Bind(new(app.TransactionProvider), new(*sqlite.TransactionProvider)),
@@ -31,7 +31,7 @@ var sqliteAdaptersSet = wire.NewSet(
 
 var sqliteTestAdaptersSet = wire.NewSet(
 	newSqliteDB,
-	sqlite.NewDatabaseMutex,
+	sqlite.NewTransactionRunner,
 
 	sqlite.NewTestTransactionProvider,
 

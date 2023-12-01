@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"time"
 
 	"github.com/boreq/errors"
 	"github.com/planetary-social/nos-event-service/internal"
@@ -22,6 +23,11 @@ func NewDatabaseRelaySource(transactionProvider TransactionProvider, logger logg
 }
 
 func (m *DatabaseRelaySource) GetRelays(ctx context.Context) ([]domain.RelayAddress, error) {
+	start := time.Now()
+	defer func() {
+		m.logger.Debug().WithField("duration", time.Since(start)).Message("got relays")
+	}()
+
 	var maybeResult []domain.MaybeRelayAddress
 	if err := m.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
 		tmp, err := adapters.Relays.List(ctx)
@@ -69,6 +75,11 @@ func NewDatabasePublicKeySource(transactionProvider TransactionProvider, logger 
 }
 
 func (d *DatabasePublicKeySource) GetPublicKeys(ctx context.Context) ([]domain.PublicKey, error) {
+	start := time.Now()
+	defer func() {
+		d.logger.Debug().WithField("duration", time.Since(start)).Message("got public keys")
+	}()
+
 	result := internal.NewEmptySet[domain.PublicKey]()
 
 	if err := d.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {

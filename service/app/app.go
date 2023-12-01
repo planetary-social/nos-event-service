@@ -14,6 +14,10 @@ var (
 	ErrPublicKeyToMonitorNotFound = errors.New("public key to monitor not found")
 )
 
+const (
+	applicationHandlerTimeout = 30 * time.Second
+)
+
 type TransactionProvider interface {
 	Transact(context.Context, func(context.Context, Adapters) error) error
 }

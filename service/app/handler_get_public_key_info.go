@@ -54,6 +54,9 @@ func NewGetPublicKeyInfoHandler(
 func (h *GetPublicKeyInfoHandler) Handle(ctx context.Context, cmd GetPublicKeyInfo) (publicKeyInfo PublicKeyInfo, err error) {
 	defer h.metrics.StartApplicationCall("getPublicKeyInfo").End(&err)
 
+	ctx, cancel := context.WithTimeout(ctx, applicationHandlerTimeout)
+	defer cancel()
+
 	var followeesCount, followersCount int
 
 	if err := h.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
