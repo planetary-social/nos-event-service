@@ -24,6 +24,7 @@ import (
 	"github.com/planetary-social/nos-event-service/service/app"
 	"github.com/planetary-social/nos-event-service/service/config"
 	"github.com/planetary-social/nos-event-service/service/domain"
+	"github.com/planetary-social/nos-event-service/service/domain/downloader"
 	"github.com/planetary-social/nos-event-service/service/domain/relays"
 	"github.com/planetary-social/nos-event-service/service/ports/http"
 	memorypubsub2 "github.com/planetary-social/nos-event-service/service/ports/memorypubsub"
@@ -89,8 +90,8 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	databaseRelaySource := app.NewDatabaseRelaySource(genericTransactionProvider, logger)
 	databasePublicKeySource := app.NewDatabasePublicKeySource(genericTransactionProvider, logger)
 	receivedEventPubSub := memorypubsub.NewReceivedEventPubSub()
-	relayDownloaderFactory := app.NewRelayDownloaderFactory(relayConnections, receivedEventPubSub, logger, prometheusPrometheus)
-	downloader := app.NewDownloader(bootstrapRelaySource, databaseRelaySource, databasePublicKeySource, logger, prometheusPrometheus, relayDownloaderFactory)
+	relayDownloaderFactory := downloader.NewRelayDownloaderFactory(relayConnections, receivedEventPubSub, logger, prometheusPrometheus)
+	downloaderDownloader := downloader.NewDownloader(bootstrapRelaySource, databaseRelaySource, databasePublicKeySource, logger, prometheusPrometheus, relayDownloaderFactory)
 	receivedEventSubscriber := memorypubsub2.NewReceivedEventSubscriber(receivedEventPubSub, saveReceivedEventHandler, logger)
 	eventSavedEventSubscriber := sqlitepubsub.NewEventSavedEventSubscriber(processSavedEventHandler, subscriber, logger, prometheusPrometheus)
 	metrics := timer.NewMetrics(application, logger)
@@ -107,7 +108,7 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 		return Service{}, nil, err
 	}
 	loggingMigrationsProgressCallback := adapters.NewLoggingMigrationsProgressCallback(logger)
-	service := NewService(application, server, downloader, receivedEventSubscriber, eventSavedEventSubscriber, metrics, runner, migrationsMigrations, loggingMigrationsProgressCallback)
+	service := NewService(application, server, downloaderDownloader, receivedEventSubscriber, eventSavedEventSubscriber, metrics, runner, migrationsMigrations, loggingMigrationsProgressCallback)
 	return service, func() {
 		cleanup()
 	}, nil
@@ -259,6 +260,6 @@ type buildTransactionSqliteAdaptersDependencies struct {
 	Logger logging.Logger
 }
 
-var downloaderSet = wire.NewSet(app.NewRelayDownloaderFactory, app.NewDownloader, relays.NewBootstrapRelaySource, wire.Bind(new(app.BootstrapRelaySource), new(*relays.BootstrapRelaySource)), app.NewDatabaseRelaySource, wire.Bind(new(app.RelaySource), new(*app.DatabaseRelaySource)), relays.NewRelayConnections, wire.Bind(new(app.RelayConnections), new(*relays.RelayConnections)), app.NewDatabasePublicKeySource, wire.Bind(new(app.PublicKeySource), new(*app.DatabasePublicKeySource)), relays.NewEventSender, wire.Bind(new(app.EventSender), new(*relays.EventSender)))
+var downloaderSet = wire.NewSet(downloader.NewRelayDownloaderFactory, downloader.NewDownloader, relays.NewBootstrapRelaySource, wire.Bind(new(downloader.BootstrapRelaySource), new(*relays.BootstrapRelaySource)), app.NewDatabaseRelaySource, wire.Bind(new(downloader.RelaySource), new(*app.DatabaseRelaySource)), relays.NewRelayConnections, wire.Bind(new(downloader.RelayConnections), new(*relays.RelayConnections)), app.NewDatabasePublicKeySource, wire.Bind(new(downloader.PublicKeySource), new(*app.DatabasePublicKeySource)), relays.NewEventSender, wire.Bind(new(app.EventSender), new(*relays.EventSender)))
 
 var domainSet = wire.NewSet(domain.NewRelaysExtractor, wire.Bind(new(app.RelaysExtractor), new(*domain.RelaysExtractor)), domain.NewContactsExtractor, wire.Bind(new(app.ContactsExtractor), new(*domain.ContactsExtractor)))

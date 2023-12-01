@@ -10,6 +10,7 @@ import (
 	"github.com/planetary-social/nos-event-service/service/adapters/sqlite"
 	"github.com/planetary-social/nos-event-service/service/app"
 	"github.com/planetary-social/nos-event-service/service/config"
+	"github.com/planetary-social/nos-event-service/service/domain/downloader"
 	"github.com/planetary-social/nos-event-service/service/domain/relays"
 )
 
@@ -62,6 +63,7 @@ var adaptersSet = wire.NewSet(
 	prometheus.NewPrometheus,
 	wire.Bind(new(app.Metrics), new(*prometheus.Prometheus)),
 	wire.Bind(new(relays.Metrics), new(*prometheus.Prometheus)),
+	wire.Bind(new(downloader.Metrics), new(*prometheus.Prometheus)),
 )
 
 func newAdaptersFactoryFn(deps buildTransactionSqliteAdaptersDependencies) sqlite.AdaptersFactoryFn {

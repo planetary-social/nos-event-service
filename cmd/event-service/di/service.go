@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/planetary-social/nos-event-service/internal/migrations"
 	"github.com/planetary-social/nos-event-service/service/app"
+	"github.com/planetary-social/nos-event-service/service/domain/downloader"
 	"github.com/planetary-social/nos-event-service/service/ports/http"
 	"github.com/planetary-social/nos-event-service/service/ports/memorypubsub"
 	"github.com/planetary-social/nos-event-service/service/ports/sqlitepubsub"
@@ -16,7 +17,7 @@ import (
 type Service struct {
 	app                        app.Application
 	server                     http.Server
-	downloader                 *app.Downloader
+	downloader                 *downloader.Downloader
 	receivedEventSubscriber    *memorypubsub.ReceivedEventSubscriber
 	eventSavedEventSubscriber  *sqlitepubsub.EventSavedEventSubscriber
 	metricsTimer               *timer.Metrics
@@ -28,7 +29,7 @@ type Service struct {
 func NewService(
 	app app.Application,
 	server http.Server,
-	downloader *app.Downloader,
+	downloader *downloader.Downloader,
 	receivedEventSubscriber *memorypubsub.ReceivedEventSubscriber,
 	eventSavedEventSubscriber *sqlitepubsub.EventSavedEventSubscriber,
 	metricsTimer *timer.Metrics,
