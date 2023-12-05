@@ -3,6 +3,7 @@ package domain
 import (
 	"time"
 
+	"github.com/boreq/errors"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/planetary-social/nos-event-service/internal"
 )
@@ -14,6 +15,7 @@ type Filter struct {
 func NewFilter(
 	eventIDs []EventId,
 	eventKinds []EventKind,
+	eventTags []FilterTag,
 	authors []PublicKey,
 	since *time.Time,
 ) Filter {
@@ -36,6 +38,14 @@ func NewFilter(
 		filter.Kinds = append(filter.Kinds, eventKind.Int())
 	}
 
+	if len(eventTags) > 0 {
+		filter.Tags = make(nostr.TagMap)
+
+		for _, eventTag := range eventTags {
+			filter.Tags[eventTag.Name().String()] = []string{eventTag.Value()}
+		}
+	}
+
 	for _, author := range authors {
 		filter.Authors = append(filter.Authors, author.Hex())
 	}
@@ -55,4 +65,25 @@ func (e Filter) Libfilter() nostr.Filter {
 
 func (e Filter) MarshalJSON() ([]byte, error) {
 	return e.filter.MarshalJSON()
+}
+
+type FilterTag struct {
+	name  EventTagName
+	value string
+}
+
+func NewFilterTag(name EventTagName, value string) (FilterTag, error) {
+	if value == "" {
+		return FilterTag{}, errors.New("value can't be empty")
+	}
+
+	return FilterTag{name: name, value: value}, nil
+}
+
+func (f FilterTag) Name() EventTagName {
+	return f.name
+}
+
+func (f FilterTag) Value() string {
+	return f.value
 }

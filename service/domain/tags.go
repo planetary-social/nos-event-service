@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	tagProfile = MustNewEventTagName("p")
-	tagRelay   = MustNewEventTagName("r")
+	TagProfile = MustNewEventTagName("p")
+	TagRelay   = MustNewEventTagName("r")
 )
 
 type EventTag struct {
@@ -50,11 +50,11 @@ func (e EventTag) FirstValueIsAnEmptyString() bool {
 }
 
 func (e EventTag) IsProfile() bool {
-	return e.name == tagProfile
+	return e.name == TagProfile
 }
 
 func (e EventTag) IsRelay() bool {
-	return e.name == tagRelay
+	return e.name == TagRelay
 }
 
 func (e EventTag) Profile() (PublicKey, error) {
