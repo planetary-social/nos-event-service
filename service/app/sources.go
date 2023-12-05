@@ -8,6 +8,7 @@ import (
 	"github.com/planetary-social/nos-event-service/internal"
 	"github.com/planetary-social/nos-event-service/internal/logging"
 	"github.com/planetary-social/nos-event-service/service/domain"
+	"github.com/planetary-social/nos-event-service/service/domain/downloader"
 )
 
 type DatabaseRelaySource struct {
@@ -74,35 +75,38 @@ func NewDatabasePublicKeySource(transactionProvider TransactionProvider, logger 
 	}
 }
 
-func (d *DatabasePublicKeySource) GetPublicKeys(ctx context.Context) ([]domain.PublicKey, error) {
+func (d *DatabasePublicKeySource) GetPublicKeys(ctx context.Context) (downloader.PublicKeys, error) {
 	start := time.Now()
 	defer func() {
 		d.logger.Debug().WithField("duration", time.Since(start)).Message("got public keys")
 	}()
 
-	result := internal.NewEmptySet[domain.PublicKey]()
+	publicKeysToMonitor := *internal.NewEmptySet[domain.PublicKey]()
+	publicKeysToMonitorFollowees := *internal.NewEmptySet[domain.PublicKey]()
 
 	if err := d.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
-		publicKeysToMonitor, err := adapters.PublicKeysToMonitor.List(ctx)
+		values, err := adapters.PublicKeysToMonitor.List(ctx)
 		if err != nil {
 			return errors.Wrap(err, "error getting public keys to monitor")
 		}
 
-		for _, v := range publicKeysToMonitor {
-			result.Put(v.PublicKey())
+		for _, value := range values {
+			publicKeysToMonitor.Put(value.PublicKey())
 
-			followees, err := adapters.Contacts.GetFollowees(ctx, v.PublicKey())
+			followees, err := adapters.Contacts.GetFollowees(ctx, value.PublicKey())
 			if err != nil {
-				return errors.Wrapf(err, "error getting followees of '%s", v.PublicKey().Hex())
+				return errors.Wrapf(err, "error getting followees of '%s", value.PublicKey().Hex())
 			}
-
-			result.PutMany(followees)
+			publicKeysToMonitorFollowees.PutMany(followees)
 		}
 
 		return nil
 	}); err != nil {
-		return nil, errors.Wrap(err, "transaction error")
+		return downloader.PublicKeys{}, errors.Wrap(err, "transaction error")
 	}
 
-	return result.List(), nil
+	return downloader.NewPublicKeys(
+		publicKeysToMonitor.List(),
+		publicKeysToMonitorFollowees.List(),
+	), nil
 }

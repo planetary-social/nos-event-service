@@ -7,8 +7,9 @@ moderation service.
 ## Design
 
 The service connects to all known relays and replicates the following events:
-- all events of kinds defined in [`globalEventTypesToDownload`][global-event-kinds-to-download-search]
-- all events created by Nos users or users in their contacts lists
+- events of kinds defined in [`globalEventTypesToDownload`][global-event-kinds-to-download-search] created by anyone
+- events of any kind created by Nos users or users in their contact lists
+- events of any kind which include Nos users in their `p` tags
 
 The relays are discovered by using the code located in
 [`RelaysExtractor`][relays-extractor-search] to scan nostr events. There is also

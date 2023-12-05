@@ -60,12 +60,44 @@ type RelaySource interface {
 }
 
 type PublicKeySource interface {
-	GetPublicKeys(ctx context.Context) ([]domain.PublicKey, error)
+	GetPublicKeys(ctx context.Context) (PublicKeys, error)
+}
+
+type PublicKeys struct {
+	publicKeysToMonitor          *internal.Set[domain.PublicKey]
+	publicKeysToMonitorFollowees *internal.Set[domain.PublicKey]
+}
+
+func NewPublicKeys(publicKeysToMonitor []domain.PublicKey, publicKeysToMonitorFollowees []domain.PublicKey) PublicKeys {
+	return PublicKeys{
+		publicKeysToMonitor:          internal.NewSet(publicKeysToMonitor),
+		publicKeysToMonitorFollowees: internal.NewSet(publicKeysToMonitorFollowees),
+	}
+}
+
+func (p PublicKeys) PublicKeysToMonitor() []domain.PublicKey {
+	return p.publicKeysToMonitor.List()
+}
+
+func (p PublicKeys) PublicKeysToMonitorFollowees() []domain.PublicKey {
+	return p.publicKeysToMonitorFollowees.List()
+}
+
+func (p PublicKeys) All() []domain.PublicKey {
+	v := internal.NewEmptySet[domain.PublicKey]()
+	v.PutMany(p.publicKeysToMonitor.List())
+	v.PutMany(p.publicKeysToMonitorFollowees.List())
+	return v.List()
+}
+
+func (p PublicKeys) Equal(o PublicKeys) bool {
+	return p.publicKeysToMonitor.Equal(o.publicKeysToMonitor) &&
+		p.publicKeysToMonitorFollowees.Equal(o.publicKeysToMonitorFollowees)
 }
 
 type Downloader struct {
 	relayDownloaders     map[domain.RelayAddress]runningRelayDownloader
-	previousPublicKeys   *internal.Set[domain.PublicKey]
+	previousPublicKeys   PublicKeys
 	relayDownloadersLock sync.Mutex // protects relayDownloaders and previousPublicKeys
 
 	bootstrapRelaySource   BootstrapRelaySource
@@ -94,7 +126,7 @@ func NewDownloader(
 		metrics:                metrics,
 		relayDownloaderFactory: relayDownloaderFactory,
 
-		previousPublicKeys: internal.NewEmptySet[domain.PublicKey](),
+		previousPublicKeys: NewPublicKeys(nil, nil),
 	}
 }
 
@@ -213,19 +245,18 @@ func (d *Downloader) updatePublicKeys(ctx context.Context) error {
 		return errors.Wrap(err, "error getting public keys")
 	}
 
-	publicKeysSet := internal.NewSet(publicKeys)
-
 	d.relayDownloadersLock.Lock()
 	defer d.relayDownloadersLock.Unlock()
 
-	isDifferentThanPrevious := publicKeysSet.Equal(d.previousPublicKeys)
+	isDifferentThanPrevious := publicKeys.Equal(d.previousPublicKeys)
 
 	for _, v := range d.relayDownloaders {
-		v.RelayDownloader.UpdateSubscription(v.Context, isDifferentThanPrevious, publicKeysSet)
+		if err := v.RelayDownloader.UpdateSubscription(v.Context, isDifferentThanPrevious, publicKeys); err != nil {
+			return errors.Wrap(err, "error updating subscription")
+		}
 	}
 
-	d.previousPublicKeys = publicKeysSet
-
+	d.previousPublicKeys = publicKeys
 	return nil
 }
 
@@ -270,6 +301,7 @@ func (d *RelayDownloader) Start(ctx context.Context) {
 		nil,
 		globalEventKindsToDownload,
 		nil,
+		nil,
 		d.downloadSince(),
 	))
 }
@@ -301,26 +333,47 @@ func (d *RelayDownloader) downloadMessagesWithErr(ctx context.Context, filter do
 	return nil
 }
 
-func (d *RelayDownloader) UpdateSubscription(ctx context.Context, isDifferentThanPrevious bool, publicKeys *internal.Set[domain.PublicKey]) {
+func (d *RelayDownloader) UpdateSubscription(ctx context.Context, isDifferentThanPrevious bool, publicKeys PublicKeys) error {
 	d.publicKeySubscriptionLock.Lock()
 	defer d.publicKeySubscriptionLock.Unlock()
 
 	if d.publicKeySubscriptionCancelFunc != nil && !isDifferentThanPrevious {
-		return
+		return nil
 	}
 
 	if d.publicKeySubscriptionCancelFunc != nil {
 		d.publicKeySubscriptionCancelFunc()
 	}
 
+	var pTags []domain.FilterTag
+	for _, publicKey := range publicKeys.PublicKeysToMonitor() {
+		tag, err := domain.NewFilterTag(domain.TagProfile, publicKey.Hex())
+		if err != nil {
+			return errors.Wrap(err, "error creating a filter tag")
+		}
+		pTags = append(pTags, tag)
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
+
 	go d.downloadMessages(ctx, domain.NewFilter(
 		nil,
 		nil,
-		publicKeys.List(),
+		nil,
+		publicKeys.All(),
 		d.downloadSince(),
 	))
+
+	go d.downloadMessages(ctx, domain.NewFilter(
+		nil,
+		nil,
+		pTags,
+		nil,
+		d.downloadSince(),
+	))
+
 	d.publicKeySubscriptionCancelFunc = cancel
+	return nil
 }
 
 type RelayDownloaderFactory struct {
