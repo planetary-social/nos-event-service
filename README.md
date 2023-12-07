@@ -85,13 +85,13 @@ address e.g. `https://example.com`.
 
 Optional, defaults to an empty string disabling pushing Pyroscope metrics.
 
-### `PYROSCOPE_BASIC_AUTH_USER`
+### `EVENTS_PYROSCOPE_BASIC_AUTH_USER`
 
 User component of basic auth of the Pyroscope server.
 
 Optional, disabled by default. Relevant only if Pyroscope server address is set.
 
-### `PYROSCOPE_BASIC_AUTH_PASSWORD`
+### `EVENTS_PYROSCOPE_BASIC_AUTH_PASSWORD`
 
 Password component of basic auth of the Pyroscope server.
 
@@ -132,16 +132,6 @@ EVENTS_DATABASE_PATH=/path/to/database.sqlite \
 EVENTS_ENVIRONMENT=DEVELOPMENT \
 go run ./cmd/event-service
 ```
-
-### Updating frontend files
-
-Frontend is written in Vue and located in `./frontend`. Precompiled files are
-supposed to be commited as they are embedded in executable files.
-
-In order to update the embedded compiled frontend files run the following
-command:
-
-    $ make frontend
 
 ### Makefile
 
