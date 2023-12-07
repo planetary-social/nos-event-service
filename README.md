@@ -70,6 +70,33 @@ set to `PRODUCTION`.
 Path to your Google Cloud credentials JSON file. Required when
 `EVENTS_ENVIRONMENT` is set to `PRODUCTION`.
 
+### `EVENTS_PYROSCOPE_APPLICATION_NAME`
+
+Pyroscope application name.
+
+Optional, defaults to `events.nos.social`. Relevant only if Pyroscope server
+address is set.
+
+### `EVENTS_PYROSCOPE_SERVER_ADDRESS`
+
+Pyroscope server address. If this variable is set to an empty string then
+uploading metrics to a Pyroscope server is disabled. This should be a full
+address e.g. `https://example.com`.
+
+Optional, defaults to an empty string disabling pushing Pyroscope metrics.
+
+### `PYROSCOPE_BASIC_AUTH_USER`
+
+User component of basic auth of the Pyroscope server.
+
+Optional, disabled by default. Relevant only if Pyroscope server address is set.
+
+### `PYROSCOPE_BASIC_AUTH_PASSWORD`
+
+Password component of basic auth of the Pyroscope server.
+
+Optional, disabled by default. Relevant only if Pyroscope server address is set.
+
 ## Metrics
 
 See configuration for the address of our metrics endpoint. Many out-of-the-box

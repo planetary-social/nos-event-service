@@ -11,6 +11,7 @@ require (
 	github.com/google/wire v0.5.0
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.0
+	github.com/grafana/pyroscope-go v1.0.4
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/mattn/go-sqlite3 v1.14.18
 	github.com/nbd-wtf/go-nostr v0.25.4
@@ -51,6 +52,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.3 // indirect
 	github.com/googleapis/gax-go/v2 v2.8.0 // indirect
+	github.com/grafana/pyroscope-go/godeltaprof v0.1.4 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/kr/text v0.2.0 // indirect

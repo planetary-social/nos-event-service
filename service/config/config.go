@@ -26,6 +26,11 @@ type Config struct {
 	googlePubSubCredentialsJSON []byte
 
 	databasePath string
+
+	pyroscopeApplicationName   string
+	pyroscopeServerAddress     string
+	pyroscopeBasicAuthUser     string
+	pyroscopeBasicAuthPassword string
 }
 
 func NewConfig(
@@ -35,6 +40,10 @@ func NewConfig(
 	googlePubSubProjectID string,
 	googlePubSubCredentialsJSON []byte,
 	databasePath string,
+	pyroscopeApplicationName string,
+	pyroscopeServerAddress string,
+	pyroscopeBasicAuthUser string,
+	pyroscopeBasicAuthPassword string,
 ) (Config, error) {
 	c := Config{
 		listenAddress:               listenAddress,
@@ -43,6 +52,10 @@ func NewConfig(
 		googlePubSubProjectID:       googlePubSubProjectID,
 		googlePubSubCredentialsJSON: googlePubSubCredentialsJSON,
 		databasePath:                databasePath,
+		pyroscopeApplicationName:    pyroscopeApplicationName,
+		pyroscopeServerAddress:      pyroscopeServerAddress,
+		pyroscopeBasicAuthUser:      pyroscopeBasicAuthUser,
+		pyroscopeBasicAuthPassword:  pyroscopeBasicAuthPassword,
 	}
 
 	c.setDefaults()
@@ -77,9 +90,29 @@ func (c *Config) DatabasePath() string {
 	return c.databasePath
 }
 
+func (c *Config) PyroscopeApplicationName() string {
+	return c.pyroscopeApplicationName
+}
+
+func (c *Config) PyroscopeServerAddress() string {
+	return c.pyroscopeServerAddress
+}
+
+func (c *Config) PyroscopeBasicAuthUser() string {
+	return c.pyroscopeBasicAuthUser
+}
+
+func (c *Config) PyroscopeBasicAuthPassword() string {
+	return c.pyroscopeBasicAuthPassword
+}
+
 func (c *Config) setDefaults() {
 	if c.listenAddress == "" {
 		c.listenAddress = ":8008"
+	}
+
+	if c.pyroscopeApplicationName == "" {
+		c.pyroscopeApplicationName = "events.nos.social"
 	}
 }
 
@@ -107,6 +140,10 @@ func (c *Config) validate() error {
 
 	if c.databasePath == "" {
 		return errors.New("missing database path")
+	}
+
+	if c.pyroscopeApplicationName == "" {
+		return errors.New("missing pyroscope application name")
 	}
 
 	return nil

@@ -254,7 +254,7 @@ type TestApplication struct {
 }
 
 func newTestAdaptersConfig(tb testing.TB) (config.Config, error) {
-	return config.NewConfig(fixtures.SomeString(), config.EnvironmentDevelopment, logging.LevelDebug, fixtures.SomeString(), nil, fixtures.SomeFile(tb))
+	return config.NewConfig(fixtures.SomeString(), config.EnvironmentDevelopment, logging.LevelDebug, fixtures.SomeString(), nil, fixtures.SomeFile(tb), fixtures.SomeString(), fixtures.SomeString(), fixtures.SomeString(), fixtures.SomeString())
 }
 
 type buildTransactionSqliteAdaptersDependencies struct {
