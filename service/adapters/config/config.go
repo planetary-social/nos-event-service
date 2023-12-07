@@ -20,6 +20,10 @@ const (
 	envGooglePubsubProjectID           = "GOOGLE_PUBSUB_PROJECT_ID"
 	envGooglePubsubCredentialsJSONPath = "GOOGLE_PUBSUB_CREDENTIALS_JSON_PATH"
 	envDatabasePath                    = "DATABASE_PATH"
+	envPyroscopeApplicationName        = "PYROSCOPE_APPLICATION_NAME"
+	envPyroscopeServerAddress          = "PYROSCOPE_SERVER_ADDRESS"
+	envPyroscopeBasicAuthUser          = "PYROSCOPE_BASIC_AUTH_USER"
+	envPyroscopeBasicAuthPassword      = "PYROSCOPE_BASIC_AUTH_PASSWORD"
 )
 
 type EnvironmentConfigLoader struct {
@@ -62,6 +66,10 @@ func (c *EnvironmentConfigLoader) Load() (config.Config, error) {
 		c.getenv(envGooglePubsubProjectID),
 		googlePubSubCredentialsJSON,
 		c.getenv(envDatabasePath),
+		c.getenv(envPyroscopeApplicationName),
+		c.getenv(envPyroscopeServerAddress),
+		c.getenv(envPyroscopeBasicAuthUser),
+		c.getenv(envPyroscopeBasicAuthPassword),
 	)
 }
 

@@ -103,6 +103,10 @@ func newTestAdaptersConfig(tb testing.TB) (config.Config, error) {
 		fixtures.SomeString(),
 		nil,
 		fixtures.SomeFile(tb),
+		fixtures.SomeString(),
+		fixtures.SomeString(),
+		fixtures.SomeString(),
+		fixtures.SomeString(),
 	)
 }
 
