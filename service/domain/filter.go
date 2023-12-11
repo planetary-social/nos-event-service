@@ -18,7 +18,8 @@ func NewFilter(
 	eventTags []FilterTag,
 	authors []PublicKey,
 	since *time.Time,
-) Filter {
+	until *time.Time,
+) (Filter, error) {
 	filter := nostr.Filter{
 		IDs:     nil,
 		Kinds:   nil,
@@ -50,13 +51,23 @@ func NewFilter(
 		filter.Authors = append(filter.Authors, author.Hex())
 	}
 
+	if since != nil && until != nil {
+		if !since.Before(*until) {
+			return Filter{}, errors.New("since must be before until")
+		}
+	}
+
 	if since != nil {
 		filter.Since = internal.Pointer(nostr.Timestamp(since.Unix()))
 	}
 
+	if until != nil {
+		filter.Until = internal.Pointer(nostr.Timestamp(until.Unix()))
+	}
+
 	return Filter{
 		filter: filter,
-	}
+	}, nil
 }
 
 func (e Filter) Libfilter() nostr.Filter {

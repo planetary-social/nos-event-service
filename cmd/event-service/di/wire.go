@@ -154,6 +154,9 @@ var downloaderSet = wire.NewSet(
 
 	relays.NewEventSender,
 	wire.Bind(new(app.EventSender), new(*relays.EventSender)),
+
+	downloader.NewTaskScheduler,
+	wire.Bind(new(downloader.Scheduler), new(*downloader.TaskScheduler)),
 )
 
 var domainSet = wire.NewSet(

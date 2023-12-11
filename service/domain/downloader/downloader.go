@@ -14,10 +14,9 @@ import (
 )
 
 const (
-	downloadEventsFromLast = 1 * time.Hour
-	storeMetricsEvery      = 1 * time.Minute
+	storeMetricsEvery = 1 * time.Minute
 
-	refreshKnownRelaysAndPublicKeysEvery = 1 * time.Minute
+	refreshKnownRelaysEvery = 1 * time.Minute
 )
 
 var (
@@ -141,15 +140,8 @@ func (d *Downloader) Run(ctx context.Context) error {
 				Message("error updating downloaders")
 		}
 
-		if err := d.updatePublicKeys(ctx); err != nil {
-			d.logger.
-				Error().
-				WithError(err).
-				Message("error updating downloaders")
-		}
-
 		select {
-		case <-time.After(refreshKnownRelaysAndPublicKeysEvery):
+		case <-time.After(refreshKnownRelaysEvery):
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -209,7 +201,7 @@ func (d *Downloader) updateDownloaders(ctx context.Context) error {
 			}
 
 			ctx, cancel := context.WithCancel(ctx)
-			downloader.Start(ctx)
+			go downloader.Run(ctx)
 			d.relayDownloaders[relayAddress] = runningRelayDownloader{
 				Context:         ctx,
 				CancelFunc:      cancel,
@@ -239,27 +231,6 @@ func (d *Downloader) getRelays(ctx context.Context) (*internal.Set[domain.RelayA
 	return result, nil
 }
 
-func (d *Downloader) updatePublicKeys(ctx context.Context) error {
-	publicKeys, err := d.publicKeySource.GetPublicKeys(ctx)
-	if err != nil {
-		return errors.Wrap(err, "error getting public keys")
-	}
-
-	d.relayDownloadersLock.Lock()
-	defer d.relayDownloadersLock.Unlock()
-
-	isDifferentThanPrevious := publicKeys.Equal(d.previousPublicKeys)
-
-	for _, v := range d.relayDownloaders {
-		if err := v.RelayDownloader.UpdateSubscription(v.Context, isDifferentThanPrevious, publicKeys); err != nil {
-			return errors.Wrap(err, "error updating subscription")
-		}
-	}
-
-	d.previousPublicKeys = publicKeys
-	return nil
-}
-
 type runningRelayDownloader struct {
 	Context         context.Context
 	CancelFunc      context.CancelFunc
@@ -267,11 +238,8 @@ type runningRelayDownloader struct {
 }
 
 type RelayDownloader struct {
-	address domain.RelayAddress
-
-	publicKeySubscriptionCancelFunc context.CancelFunc
-	publicKeySubscriptionLock       sync.Mutex
-
+	address                domain.RelayAddress
+	scheduler              Scheduler
 	receivedEventPublisher ReceivedEventPublisher
 	relayConnections       RelayConnections
 	logger                 logging.Logger
@@ -280,14 +248,15 @@ type RelayDownloader struct {
 
 func NewRelayDownloader(
 	address domain.RelayAddress,
+	scheduler Scheduler,
 	receivedEventPublisher ReceivedEventPublisher,
 	relayConnections RelayConnections,
 	logger logging.Logger,
 	metrics Metrics,
 ) *RelayDownloader {
 	v := &RelayDownloader{
-		address: address,
-
+		address:                address,
+		scheduler:              scheduler,
 		receivedEventPublisher: receivedEventPublisher,
 		relayConnections:       relayConnections,
 		logger:                 logger.New(fmt.Sprintf("relayDownloader(%s)", address.String())),
@@ -296,35 +265,29 @@ func NewRelayDownloader(
 	return v
 }
 
-func (d *RelayDownloader) Start(ctx context.Context) {
-	go d.downloadMessages(ctx, domain.NewFilter(
-		nil,
-		globalEventKindsToDownload,
-		nil,
-		nil,
-		d.downloadSince(),
-	))
-}
-
-func (d *RelayDownloader) downloadSince() *time.Time {
-	return internal.Pointer(time.Now().Add(-downloadEventsFromLast))
-
-}
-
-func (d *RelayDownloader) downloadMessages(ctx context.Context, filter domain.Filter) {
-	if err := d.downloadMessagesWithErr(ctx, filter); err != nil {
-		d.logger.Error().WithError(err).Message("error downloading messages")
+func (d *RelayDownloader) Run(ctx context.Context) {
+	for task := range d.scheduler.GetTasks(ctx, d.address) {
+		d.performTask(task)
 	}
 }
 
-func (d *RelayDownloader) downloadMessagesWithErr(ctx context.Context, filter domain.Filter) error {
-	ch, err := d.relayConnections.GetEvents(ctx, d.address, filter)
+func (d *RelayDownloader) performTask(task Task) {
+	if err := d.performTaskWithErr(task); err != nil {
+		d.logger.Error().WithError(err).Message("error downloading messages")
+		task.OnError(err)
+	}
+}
+
+func (d *RelayDownloader) performTaskWithErr(task Task) error {
+	ch, err := d.relayConnections.GetEvents(task.Ctx(), d.address, task.Filter())
 	if err != nil {
 		return errors.Wrap(err, "error getting events ch")
 	}
 
 	for eventOrEOSE := range ch {
-		if !eventOrEOSE.EOSE() {
+		if eventOrEOSE.EOSE() {
+			task.OnReceivedEOSE()
+		} else {
 			d.metrics.ReportReceivedEvent(d.address)
 			d.receivedEventPublisher.Publish(d.address, eventOrEOSE.Event())
 		}
@@ -333,52 +296,10 @@ func (d *RelayDownloader) downloadMessagesWithErr(ctx context.Context, filter do
 	return nil
 }
 
-func (d *RelayDownloader) UpdateSubscription(ctx context.Context, isDifferentThanPrevious bool, publicKeys PublicKeys) error {
-	d.publicKeySubscriptionLock.Lock()
-	defer d.publicKeySubscriptionLock.Unlock()
-
-	if d.publicKeySubscriptionCancelFunc != nil && !isDifferentThanPrevious {
-		return nil
-	}
-
-	if d.publicKeySubscriptionCancelFunc != nil {
-		d.publicKeySubscriptionCancelFunc()
-	}
-
-	var pTags []domain.FilterTag
-	for _, publicKey := range publicKeys.PublicKeysToMonitor() {
-		tag, err := domain.NewFilterTag(domain.TagProfile, publicKey.Hex())
-		if err != nil {
-			return errors.Wrap(err, "error creating a filter tag")
-		}
-		pTags = append(pTags, tag)
-	}
-
-	ctx, cancel := context.WithCancel(ctx)
-
-	go d.downloadMessages(ctx, domain.NewFilter(
-		nil,
-		nil,
-		nil,
-		publicKeys.All(),
-		d.downloadSince(),
-	))
-
-	go d.downloadMessages(ctx, domain.NewFilter(
-		nil,
-		nil,
-		pTags,
-		nil,
-		d.downloadSince(),
-	))
-
-	d.publicKeySubscriptionCancelFunc = cancel
-	return nil
-}
-
 type RelayDownloaderFactory struct {
 	relayConnections       RelayConnections
 	receivedEventPublisher ReceivedEventPublisher
+	scheduler              Scheduler
 	logger                 logging.Logger
 	metrics                Metrics
 }
@@ -386,12 +307,14 @@ type RelayDownloaderFactory struct {
 func NewRelayDownloaderFactory(
 	relayConnections RelayConnections,
 	receivedEventPublisher ReceivedEventPublisher,
+	scheduler Scheduler,
 	logger logging.Logger,
 	metrics Metrics,
 ) *RelayDownloaderFactory {
 	return &RelayDownloaderFactory{
 		relayConnections:       relayConnections,
 		receivedEventPublisher: receivedEventPublisher,
+		scheduler:              scheduler,
 		logger:                 logger.New("relayDownloaderFactory"),
 		metrics:                metrics,
 	}
@@ -400,6 +323,7 @@ func NewRelayDownloaderFactory(
 func (r *RelayDownloaderFactory) CreateRelayDownloader(address domain.RelayAddress) (*RelayDownloader, error) {
 	return NewRelayDownloader(
 		address,
+		r.scheduler,
 		r.receivedEventPublisher,
 		r.relayConnections,
 		r.logger,

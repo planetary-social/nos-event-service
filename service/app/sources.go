@@ -11,6 +11,8 @@ import (
 	"github.com/planetary-social/nos-event-service/service/domain/downloader"
 )
 
+const cachePublicKeysFor = 1 * time.Minute
+
 type DatabaseRelaySource struct {
 	transactionProvider TransactionProvider
 	logger              logging.Logger
@@ -109,4 +111,31 @@ func (d *DatabasePublicKeySource) GetPublicKeys(ctx context.Context) (downloader
 		publicKeysToMonitor.List(),
 		publicKeysToMonitorFollowees.List(),
 	), nil
+}
+
+type CachedDatabasePublicKeySource struct {
+	keys   *downloader.PublicKeys
+	t      time.Time
+	source downloader.PublicKeySource
+}
+
+func NewCachedDatabasePublicKeySource(
+	source downloader.PublicKeySource,
+) *CachedDatabasePublicKeySource {
+	return &CachedDatabasePublicKeySource{
+		source: source,
+	}
+}
+
+func (d *CachedDatabasePublicKeySource) GetPublicKeys(ctx context.Context) (downloader.PublicKeys, error) {
+	if d.keys == nil || time.Since(d.t) > cachePublicKeysFor {
+		newKeys, err := d.source.GetPublicKeys(ctx)
+		if err != nil {
+			return downloader.PublicKeys{}, errors.Wrap(err, "error getting new public keys")
+		}
+		d.keys = &newKeys
+		d.t = time.Now()
+	}
+
+	return *d.keys, nil
 }
