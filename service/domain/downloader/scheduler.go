@@ -380,7 +380,7 @@ func (t *createdTimeWindowTask) Done() bool {
 }
 
 func (t *createdTimeWindowTask) Reset() (Task, bool) {
-	if t.task == nil || t.task.state != TimeWindowTaskStateStarted {
+	if t.task == nil || t.task.State() != TimeWindowTaskStateStarted {
 		task, err := NewTimeWindowTask(t.kinds, t.tags, t.authors, t.window)
 		if err != nil {
 			panic(err) // todo
