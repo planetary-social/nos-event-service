@@ -85,6 +85,20 @@ func MustNewFilter(
 	return v
 }
 
+func (f Filter) Since() *time.Time {
+	if f.filter.Since == nil {
+		return nil
+	}
+	return internal.Pointer(time.Unix(int64(*f.filter.Since), 0))
+}
+
+func (f Filter) Until() *time.Time {
+	if f.filter.Until == nil {
+		return nil
+	}
+	return internal.Pointer(time.Unix(int64(*f.filter.Until), 0))
+}
+
 func (e Filter) Libfilter() nostr.Filter {
 	return e.filter
 }

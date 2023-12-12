@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	sendOutTasksEvery = 1 * time.Second
+	sendOutTasksEvery = 10 * time.Millisecond
 
 	initialWindowAge = 1 * time.Hour
 	windowSize       = 1 * time.Minute
@@ -67,8 +67,18 @@ func (t *TaskScheduler) GetTasks(ctx context.Context, relay domain.RelayAddress)
 
 func (t *TaskScheduler) Run(ctx context.Context) error {
 	for {
-		if err := t.sendOutTasks(); err != nil {
+		hadTasks, err := t.sendOutTasks()
+		if err != nil {
 			return errors.Wrap(err, "error sending out generators")
+		}
+
+		if hadTasks {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				continue
+			}
 		}
 
 		select {
@@ -80,25 +90,37 @@ func (t *TaskScheduler) Run(ctx context.Context) error {
 	}
 }
 
-func (t *TaskScheduler) sendOutTasks() error {
+func (t *TaskScheduler) sendOutTasks() (bool, error) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
+	sentTasksForAtLeastOneSubscription := false
+
 	for _, taskSubscription := range t.taskSubscriptions {
-		if err := t.sendOutTasksForSubscription(taskSubscription); err != nil {
-			return errors.Wrap(err, "error sending out generators")
+		sentTasks, err := t.sendOutTasksForSubscription(taskSubscription)
+		if err != nil {
+			return false, errors.Wrap(err, "error sending out generators")
+		}
+		if sentTasks {
+			sentTasksForAtLeastOneSubscription = true
 		}
 	}
 
-	return nil
+	return sentTasksForAtLeastOneSubscription, nil
 }
 
-func (t *TaskScheduler) sendOutTasksForSubscription(subscription *taskSubscription) error {
+func (t *TaskScheduler) sendOutTasksForSubscription(subscription *taskSubscription) (bool, error) {
 	generator, err := t.getOrCreateGenerator(subscription.address)
 	if err != nil {
-		return errors.Wrap(err, "error getting a generator")
+		return false, errors.Wrap(err, "error getting a generator")
 	}
-	return generator.PushTasks(subscription.ctx, subscription.ch)
+	// todo cleanup subs
+	n, err := generator.PushTasks(subscription.ctx, subscription.ch)
+	if err != nil {
+		return false, errors.Wrap(err, "error pushing tasks")
+	}
+
+	return n > 0, nil
 }
 
 func (t *TaskScheduler) getOrCreateGenerator(address domain.RelayAddress) (*RelayTaskGenerator, error) {
@@ -189,21 +211,21 @@ func NewRelayTaskGenerator(
 	}, nil
 }
 
-func (t *RelayTaskGenerator) PushTasks(ctx context.Context, ch chan<- Task) error {
+func (t *RelayTaskGenerator) PushTasks(ctx context.Context, ch chan<- Task) (int, error) {
 	tasks, err := t.getTasksToPush(ctx)
 	if err != nil {
-		return errors.Wrap(err, "error getting tasks to push")
+		return 0, errors.Wrap(err, "error getting tasks to push")
 	}
 
 	for _, task := range tasks {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return 0, ctx.Err()
 		case ch <- task:
 			continue
 		}
 	}
-	return nil
+	return len(tasks), nil
 }
 
 func (t *RelayTaskGenerator) getTasksToPush(ctx context.Context) ([]Task, error) {
@@ -251,7 +273,7 @@ type TimeWindowTaskGenerator struct {
 	authors []domain.PublicKey
 
 	lastWindow             TimeWindow
-	createdTimeWindowTasks []*createdTimeWindowTask
+	runningTimeWindowTasks []*createdTimeWindowTask
 	lock                   sync.Mutex
 
 	currentTimeProvider CurrentTimeProvider
@@ -265,7 +287,7 @@ func NewTimeWindowTaskGenerator(
 ) (*TimeWindowTaskGenerator, error) {
 	now := currentTimeProvider.GetCurrentTime()
 
-	startingWindow, err := NewTimeWindow(now.Add(-initialWindowAge), windowSize)
+	startingWindow, err := NewTimeWindow(now.Add(-initialWindowAge-windowSize), windowSize)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating the starting time window")
 	}
@@ -283,19 +305,19 @@ func (t *TimeWindowTaskGenerator) Generate() []Task {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	slices.DeleteFunc(t.createdTimeWindowTasks, func(task *createdTimeWindowTask) bool {
+	t.runningTimeWindowTasks = slices.DeleteFunc(t.runningTimeWindowTasks, func(task *createdTimeWindowTask) bool {
 		return task.Done()
 	})
 
-	for i := len(t.createdTimeWindowTasks); i < timeWindowTaskConcurrency; i++ {
+	for i := len(t.runningTimeWindowTasks); i < timeWindowTaskConcurrency; i++ {
 		task, ok := t.generateNewTask()
 		if ok {
-			t.createdTimeWindowTasks = append(t.createdTimeWindowTasks, task)
+			t.runningTimeWindowTasks = append(t.runningTimeWindowTasks, task)
 		}
 	}
 
 	var result []Task
-	for _, task := range t.createdTimeWindowTasks {
+	for _, task := range t.runningTimeWindowTasks {
 		if t, ok := task.Reset(); ok {
 			result = append(result, t)
 		}
@@ -323,6 +345,7 @@ func (t *TimeWindowTaskGenerator) generateNewTask() (*createdTimeWindowTask, boo
 	if nextWindow.End().After(now.Add(-time.Minute)) {
 		return nil, false
 	}
+	t.lastWindow = nextWindow
 	return newCreatedTimeWindowTask(t.kinds, t.tags, t.authors, nextWindow), true
 }
 

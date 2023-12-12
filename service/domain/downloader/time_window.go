@@ -1,6 +1,10 @@
 package downloader
 
-import "time"
+import (
+	"time"
+
+	"github.com/boreq/errors"
+)
 
 type TimeWindow struct {
 	start    time.Time
@@ -8,7 +12,18 @@ type TimeWindow struct {
 }
 
 func NewTimeWindow(start time.Time, duration time.Duration) (TimeWindow, error) {
+	if duration == 0 {
+		return TimeWindow{}, errors.New("time window must have a duration")
+	}
 	return TimeWindow{start: start, duration: duration}, nil
+}
+
+func MustNewTimeWindow(start time.Time, duration time.Duration) TimeWindow {
+	v, err := NewTimeWindow(start, duration)
+	if err != nil {
+		panic(err)
+	}
+	return v
 }
 
 func (t TimeWindow) Start() time.Time {
