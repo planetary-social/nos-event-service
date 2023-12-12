@@ -190,7 +190,12 @@ func NewRelayTaskGenerator(
 }
 
 func (t *RelayTaskGenerator) PushTasks(ctx context.Context, ch chan<- Task) error {
-	for _, task := range t.getTasksToPush(ctx) {
+	tasks, err := t.getTasksToPush(ctx)
+	if err != nil {
+		return errors.Wrap(err, "error getting tasks to push")
+	}
+
+	for _, task := range tasks {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -201,19 +206,19 @@ func (t *RelayTaskGenerator) PushTasks(ctx context.Context, ch chan<- Task) erro
 	return nil
 }
 
-func (t *RelayTaskGenerator) getTasksToPush(ctx context.Context) []Task {
+func (t *RelayTaskGenerator) getTasksToPush(ctx context.Context) ([]Task, error) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	if err := t.updateFilters(ctx); err != nil {
-
+		return nil, errors.Wrap(err, "error updating filters")
 	}
 
 	var result []Task
 	for _, generator := range t.generators() {
 		result = append(result, generator.Generate()...)
 	}
-	return result
+	return result, nil
 }
 
 func (t *RelayTaskGenerator) generators() []*TimeWindowTaskGenerator {
