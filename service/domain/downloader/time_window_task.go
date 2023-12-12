@@ -22,7 +22,7 @@ type TimeWindowTaskState struct {
 type TimeWindowTask struct {
 	filter domain.Filter
 	state  TimeWindowTaskState
-	lock   *sync.Mutex
+	lock   sync.Mutex
 }
 
 func NewTimeWindowTask(

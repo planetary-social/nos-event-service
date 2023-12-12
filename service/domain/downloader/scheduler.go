@@ -20,6 +20,10 @@ const (
 	timeWindowTaskConcurrency = 1
 )
 
+type CurrentTimeProvider interface {
+	GetCurrentTime() time.Time
+}
+
 type Task interface {
 	Ctx() context.Context
 	Filter() domain.Filter
@@ -37,15 +41,21 @@ type TaskScheduler struct {
 	taskGenerators    map[domain.RelayAddress]*RelayTaskGenerator
 	lock              sync.Mutex
 
-	publicKeySource PublicKeySource
-	logger          logging.Logger
+	publicKeySource     PublicKeySource
+	currentTimeProvider CurrentTimeProvider
+	logger              logging.Logger
 }
 
-func NewTaskScheduler(publicKeySource PublicKeySource, logger logging.Logger) *TaskScheduler {
+func NewTaskScheduler(
+	publicKeySource PublicKeySource,
+	currentTimeProvider CurrentTimeProvider,
+	logger logging.Logger,
+) *TaskScheduler {
 	return &TaskScheduler{
-		taskGenerators:  make(map[domain.RelayAddress]*RelayTaskGenerator),
-		publicKeySource: publicKeySource,
-		logger:          logger,
+		taskGenerators:      make(map[domain.RelayAddress]*RelayTaskGenerator),
+		publicKeySource:     publicKeySource,
+		currentTimeProvider: currentTimeProvider,
+		logger:              logger.New("taskScheduler"),
 	}
 }
 
@@ -93,13 +103,15 @@ func (t *TaskScheduler) sendOutTasksForSubscription(subscription *taskSubscripti
 
 func (t *TaskScheduler) getOrCreateGenerator(address domain.RelayAddress) (*RelayTaskGenerator, error) {
 	v, ok := t.taskGenerators[address]
-	if !ok {
-		v, err := NewRelayTaskGenerator(t.publicKeySource, t.logger)
-		if err != nil {
-			return nil, errors.Wrap(err, "error creating a task generator")
-		}
-		t.taskGenerators[address] = v
+	if ok {
+		return v, nil
 	}
+
+	v, err := NewRelayTaskGenerator(t.publicKeySource, t.currentTimeProvider, t.logger)
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating a task generator")
+	}
+	t.taskGenerators[address] = v
 	return v, nil
 }
 
@@ -135,19 +147,39 @@ type RelayTaskGenerator struct {
 	logger          logging.Logger
 }
 
-func NewRelayTaskGenerator(publicKeySource PublicKeySource, logger logging.Logger) (*RelayTaskGenerator, error) {
-	globalTask, err := NewTimeWindowTaskGenerator(globalEventKindsToDownload, nil, nil)
+func NewRelayTaskGenerator(
+	publicKeySource PublicKeySource,
+	currentTimeProvider CurrentTimeProvider,
+	logger logging.Logger,
+) (*RelayTaskGenerator, error) {
+	globalTask, err := NewTimeWindowTaskGenerator(
+		globalEventKindsToDownload,
+		nil,
+		nil,
+		currentTimeProvider,
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating the global task")
 	}
-	authorTask, err := NewTimeWindowTaskGenerator(nil, nil, nil)
+	authorTask, err := NewTimeWindowTaskGenerator(
+		nil,
+		nil,
+		nil,
+		currentTimeProvider,
+	)
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating the per user task")
+		return nil, errors.Wrap(err, "error creating the author task")
 	}
-	tagTask, err := NewTimeWindowTaskGenerator(nil, nil, nil)
+	tagTask, err := NewTimeWindowTaskGenerator(
+		nil,
+		nil,
+		nil,
+		currentTimeProvider,
+	)
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating the per user task")
+		return nil, errors.Wrap(err, "error creating the tag task")
 	}
+
 	return &RelayTaskGenerator{
 		publicKeySource: publicKeySource,
 		globalTask:      globalTask,
@@ -216,23 +248,29 @@ type TimeWindowTaskGenerator struct {
 	lastWindow             TimeWindow
 	createdTimeWindowTasks []*createdTimeWindowTask
 	lock                   sync.Mutex
+
+	currentTimeProvider CurrentTimeProvider
 }
 
 func NewTimeWindowTaskGenerator(
 	kinds []domain.EventKind,
 	tags []domain.FilterTag,
 	authors []domain.PublicKey,
+	currentTimeProvider CurrentTimeProvider,
 ) (*TimeWindowTaskGenerator, error) {
-	startingWindow, err := NewTimeWindow(time.Now().Add(-initialWindowAge), windowSize)
+	now := currentTimeProvider.GetCurrentTime()
+
+	startingWindow, err := NewTimeWindow(now.Add(-initialWindowAge), windowSize)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating the starting time window")
 	}
 
 	return &TimeWindowTaskGenerator{
-		lastWindow: startingWindow,
-		kinds:      kinds,
-		tags:       tags,
-		authors:    authors,
+		lastWindow:          startingWindow,
+		kinds:               kinds,
+		tags:                tags,
+		authors:             authors,
+		currentTimeProvider: currentTimeProvider,
 	}, nil
 }
 
@@ -276,7 +314,8 @@ func (t *TimeWindowTaskGenerator) UpdateAuthors(authors []domain.PublicKey) {
 
 func (t *TimeWindowTaskGenerator) generateNewTask() (*createdTimeWindowTask, bool) {
 	nextWindow := t.lastWindow.Advance()
-	if nextWindow.End().After(time.Now().Add(-time.Minute)) {
+	now := t.currentTimeProvider.GetCurrentTime()
+	if nextWindow.End().After(now.Add(-time.Minute)) {
 		return nil, false
 	}
 	return newCreatedTimeWindowTask(t.kinds, t.tags, t.authors, nextWindow), true
@@ -306,6 +345,9 @@ func newCreatedTimeWindowTask(
 }
 
 func (t *createdTimeWindowTask) Done() bool {
+	if t.task == nil {
+		return false
+	}
 	return t.task.State() == TimeWindowTaskStateDone
 }
 

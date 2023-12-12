@@ -70,6 +70,21 @@ func NewFilter(
 	}, nil
 }
 
+func MustNewFilter(
+	eventIDs []EventId,
+	eventKinds []EventKind,
+	eventTags []FilterTag,
+	authors []PublicKey,
+	since *time.Time,
+	until *time.Time,
+) Filter {
+	v, err := NewFilter(eventIDs, eventKinds, eventTags, authors, since, until)
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
 func (e Filter) Libfilter() nostr.Filter {
 	return e.filter
 }
