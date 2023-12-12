@@ -95,6 +95,43 @@ forloop:
 	requireEqualWindows(t, expectedWindows, windows)
 }
 
+func TestTaskScheduler_ThereIsOneWindowOfDelayToLetRelaysSyncData(t *testing.T) {
+	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), 5*time.Second)
+	defer cancel()
+
+	start := date(2023, time.December, 27, 10, 30, 00)
+
+	ts := newTestedTaskScheduler(ctx, t)
+	ts.CurrentTimeProvider.SetCurrentTime(start)
+
+	ch := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
+
+	var windows []downloader.TimeWindow
+forloop:
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case v := <-ch:
+			start := v.Filter().Since()
+			duration := v.Filter().Until().Sub(*v.Filter().Since())
+			window := downloader.MustNewTimeWindow(*start, duration)
+			windows = append(windows, window)
+			v.OnReceivedEOSE()
+		case <-time.After(1 * time.Second):
+			t.Log("no new tasks for a short while, assuming that scheduler is waiting for them to complete")
+			break forloop
+		}
+	}
+
+	slices.SortFunc(windows, func(a, b downloader.TimeWindow) int {
+		return a.Start().Compare(b.Start())
+	})
+
+	lastWindow := windows[len(windows)-1]
+	require.Equal(t, date(2023, time.December, 27, 10, 29, 00), lastWindow.End().UTC())
+}
+
 type testedTaskScheduler struct {
 	Scheduler           *downloader.TaskScheduler
 	CurrentTimeProvider *mocks.CurrentTimeProvider
