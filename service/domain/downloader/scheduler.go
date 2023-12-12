@@ -238,7 +238,11 @@ func (t *RelayTaskGenerator) getTasksToPush(ctx context.Context) ([]Task, error)
 
 	var result []Task
 	for _, generator := range t.generators() {
-		result = append(result, generator.Generate()...)
+		tasks, err := generator.Generate()
+		if err != nil {
+			return nil, errors.Wrap(err, "error calling one of the generators")
+		}
+		result = append(result, tasks...)
 	}
 	return result, nil
 }
@@ -301,7 +305,7 @@ func NewTimeWindowTaskGenerator(
 	}, nil
 }
 
-func (t *TimeWindowTaskGenerator) Generate() []Task {
+func (t *TimeWindowTaskGenerator) Generate() ([]Task, error) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -318,11 +322,15 @@ func (t *TimeWindowTaskGenerator) Generate() []Task {
 
 	var result []Task
 	for _, task := range t.runningTimeWindowTasks {
-		if t, ok := task.Reset(); ok {
+		t, ok, err := task.MaybeReset()
+		if err != nil {
+			return nil, errors.Wrap(err, "error resetting a task")
+		}
+		if ok {
 			result = append(result, t)
 		}
 	}
-	return result
+	return result, nil
 }
 
 func (t *TimeWindowTaskGenerator) UpdateTags(tags []domain.FilterTag) {
@@ -379,14 +387,14 @@ func (t *createdTimeWindowTask) Done() bool {
 	return t.task.State() == TimeWindowTaskStateDone
 }
 
-func (t *createdTimeWindowTask) Reset() (Task, bool) {
+func (t *createdTimeWindowTask) MaybeReset() (Task, bool, error) {
 	if t.task == nil || t.task.State() != TimeWindowTaskStateStarted {
 		task, err := NewTimeWindowTask(t.kinds, t.tags, t.authors, t.window)
 		if err != nil {
-			panic(err) // todo
+			return nil, false, errors.Wrap(err, "error creating a new time window task")
 		}
 		t.task = task
-		return task, true
+		return task, true, nil
 	}
-	return nil, false
+	return nil, false, nil
 }
