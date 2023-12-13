@@ -198,7 +198,7 @@ func newTestedTaskScheduler(ctx context.Context, tb testing.TB) *testedTaskSched
 	currentTimeProvider := mocks.NewCurrentTimeProvider()
 	source := newMockPublicKeySource()
 	logger := logging.NewDevNullLogger()
-	scheduler := downloader.NewTaskScheduler(ctx, source, currentTimeProvider, logger)
+	scheduler := downloader.NewTaskScheduler(source, currentTimeProvider, logger)
 	go func() {
 		_ = scheduler.Run(ctx)
 	}()
