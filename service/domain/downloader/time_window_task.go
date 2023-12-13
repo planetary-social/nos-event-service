@@ -20,9 +20,11 @@ type TimeWindowTaskState struct {
 }
 
 type TimeWindowTask struct {
+	filter domain.Filter
+	window TimeWindow
+
 	ctx    context.Context
 	cancel context.CancelFunc
-	filter domain.Filter
 	state  TimeWindowTaskState
 	lock   sync.Mutex
 }
@@ -34,26 +36,18 @@ func NewTimeWindowTask(
 	authors []domain.PublicKey,
 	window TimeWindow,
 ) (*TimeWindowTask, error) {
-	filter, err := domain.NewFilter(
-		nil,
-		kinds,
-		tags,
-		authors,
-		internal.Pointer(window.Start()),
-		internal.Pointer(window.End()),
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "error creating a filter")
-	}
-
 	ctx, cancel := context.WithCancel(ctx)
 
-	return &TimeWindowTask{
+	t := &TimeWindowTask{
 		ctx:    ctx,
 		cancel: cancel,
-		filter: filter,
 		state:  TimeWindowTaskStateStarted,
-	}, nil
+		window: window,
+	}
+	if err := t.updateFilter(kinds, tags, authors); err != nil {
+		return nil, errors.New("error updating the filter")
+	}
+	return t, nil
 }
 
 func (t *TimeWindowTask) Ctx() context.Context {
@@ -92,7 +86,7 @@ func (t *TimeWindowTask) CheckIfDoneAndEnd() bool {
 	return true
 }
 
-func (t *TimeWindowTask) MaybeReset(ctx context.Context) (bool, error) {
+func (t *TimeWindowTask) MaybeReset(ctx context.Context, kinds []domain.EventKind, tags []domain.FilterTag, authors []domain.PublicKey) (bool, error) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -109,7 +103,31 @@ func (t *TimeWindowTask) MaybeReset(ctx context.Context) (bool, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	t.ctx = ctx
 	t.cancel = cancel
+	t.state = TimeWindowTaskStateStarted
+
+	if err := t.updateFilter(kinds, tags, authors); err != nil {
+		return false, errors.New("error updating the filter")
+	}
+
 	return true, nil
+}
+
+func (t *TimeWindowTask) updateFilter(kinds []domain.EventKind, tags []domain.FilterTag, authors []domain.PublicKey) error {
+	filter, err := domain.NewFilter(
+		nil,
+		kinds,
+		tags,
+		authors,
+		internal.Pointer(t.window.Start()),
+		internal.Pointer(t.window.End()),
+	)
+	if err != nil {
+		return errors.Wrap(err, "error creating a filter")
+	}
+
+	t.filter = filter
+
+	return nil
 }
 
 func (t *TimeWindowTask) isDead() bool {

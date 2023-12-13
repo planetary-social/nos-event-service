@@ -164,6 +164,7 @@ func NewRelayTaskGenerator(
 		nil,
 		nil,
 		currentTimeProvider,
+		logger,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating the global task")
@@ -173,6 +174,7 @@ func NewRelayTaskGenerator(
 		nil,
 		nil,
 		currentTimeProvider,
+		logger,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating the author task")
@@ -182,6 +184,7 @@ func NewRelayTaskGenerator(
 		nil,
 		nil,
 		currentTimeProvider,
+		logger,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating the tag task")
@@ -265,7 +268,17 @@ func (t *RelayTaskGenerator) getTasksToPush(ctx context.Context) ([]Task, error)
 }
 
 func (t *RelayTaskGenerator) generators() []*TimeWindowTaskGenerator {
-	return []*TimeWindowTaskGenerator{t.globalTask, t.authorTask, t.tagTask}
+	generators := []*TimeWindowTaskGenerator{t.globalTask}
+
+	if len(t.authorTask.authors) > 0 {
+		generators = append(generators, t.authorTask)
+	}
+
+	if len(t.tagTask.tags) > 0 {
+		generators = append(generators, t.tagTask)
+	}
+
+	return generators
 }
 
 func (t *RelayTaskGenerator) updateFilters(ctx context.Context) error {
@@ -298,6 +311,7 @@ type TimeWindowTaskGenerator struct {
 	lock                   sync.Mutex
 
 	currentTimeProvider CurrentTimeProvider
+	logger              logging.Logger
 }
 
 func NewTimeWindowTaskGenerator(
@@ -305,6 +319,7 @@ func NewTimeWindowTaskGenerator(
 	tags []domain.FilterTag,
 	authors []domain.PublicKey,
 	currentTimeProvider CurrentTimeProvider,
+	logger logging.Logger,
 ) (*TimeWindowTaskGenerator, error) {
 	now := currentTimeProvider.GetCurrentTime()
 
@@ -319,6 +334,7 @@ func NewTimeWindowTaskGenerator(
 		tags:                tags,
 		authors:             authors,
 		currentTimeProvider: currentTimeProvider,
+		logger:              logger.New("timeWindowTaskGenerator"),
 	}, nil
 }
 
@@ -344,7 +360,7 @@ func (t *TimeWindowTaskGenerator) Generate(ctx context.Context) ([]Task, error) 
 	}
 
 	for _, task := range t.runningTimeWindowTasks {
-		ok, err := task.MaybeReset(ctx)
+		ok, err := task.MaybeReset(ctx, t.kinds, t.tags, t.authors)
 		if err != nil {
 			return nil, errors.Wrap(err, "error resetting a task")
 		}
