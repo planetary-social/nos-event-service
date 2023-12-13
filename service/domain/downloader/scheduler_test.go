@@ -18,6 +18,8 @@ import (
 const numberOfTaskTypes = 3
 
 func TestTaskScheduler_SchedulerWaitsForTasksToCompleteBeforeProducingMore(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), 5*time.Second)
 	defer cancel()
 
@@ -26,7 +28,8 @@ func TestTaskScheduler_SchedulerWaitsForTasksToCompleteBeforeProducingMore(t *te
 	ts := newTestedTaskScheduler(ctx, t)
 	ts.CurrentTimeProvider.SetCurrentTime(start)
 
-	ch := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
+	ch, err := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
+	require.NoError(t, err)
 
 	var filters []domain.Filter
 forloop:
@@ -46,6 +49,8 @@ forloop:
 }
 
 func TestTaskScheduler_SchedulerProducesTasksFromSequentialTimeWindowsLeadingUpToCurrentTime(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), 5*time.Second)
 	defer cancel()
 
@@ -54,7 +59,8 @@ func TestTaskScheduler_SchedulerProducesTasksFromSequentialTimeWindowsLeadingUpT
 	ts := newTestedTaskScheduler(ctx, t)
 	ts.CurrentTimeProvider.SetCurrentTime(start)
 
-	ch := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
+	ch, err := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
+	require.NoError(t, err)
 
 	filters := make(map[downloader.TimeWindow][]domain.Filter)
 forloop:
@@ -97,6 +103,8 @@ forloop:
 }
 
 func TestTaskScheduler_ThereIsOneWindowOfDelayToLetRelaysSyncData(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), 5*time.Second)
 	defer cancel()
 
@@ -105,7 +113,8 @@ func TestTaskScheduler_ThereIsOneWindowOfDelayToLetRelaysSyncData(t *testing.T) 
 	ts := newTestedTaskScheduler(ctx, t)
 	ts.CurrentTimeProvider.SetCurrentTime(start)
 
-	ch := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
+	ch, err := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
+	require.NoError(t, err)
 
 	var windows []downloader.TimeWindow
 forloop:
@@ -134,6 +143,8 @@ forloop:
 }
 
 func TestTaskScheduler_TerminatesTasks(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), 5*time.Second)
 	defer cancel()
 
@@ -142,7 +153,8 @@ func TestTaskScheduler_TerminatesTasks(t *testing.T) {
 	ts := newTestedTaskScheduler(ctx, t)
 	ts.CurrentTimeProvider.SetCurrentTime(start)
 
-	ch := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
+	ch, err := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
+	require.NoError(t, err)
 
 	firstTaskCh := make(chan downloader.Task)
 
@@ -151,7 +163,7 @@ func TestTaskScheduler_TerminatesTasks(t *testing.T) {
 		for {
 			select {
 			case <-ctx.Done():
-				t.Fatal(ctx.Err())
+				return
 			case v := <-ch:
 				v.OnReceivedEOSE()
 				if first {

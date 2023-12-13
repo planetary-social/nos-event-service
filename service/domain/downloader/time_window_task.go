@@ -78,16 +78,41 @@ func (t *TimeWindowTask) OnError(err error) {
 	t.state = TimeWindowTaskStateError
 }
 
-func (t *TimeWindowTask) State() TimeWindowTaskState {
+func (t *TimeWindowTask) CheckIfDoneAndEnd() bool {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	return t.state
-}
-
-func (t *TimeWindowTask) End() {
-	t.lock.Lock()
-	defer t.lock.Unlock()
+	if t.state != TimeWindowTaskStateDone {
+		return false
+	}
 
 	t.cancel()
+	return true
+}
+
+func (t *TimeWindowTask) MaybeReset(ctx context.Context) (bool, error) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	if t.state == TimeWindowTaskStateDone {
+		return false, errors.New("why are we trying to reset a completed task?")
+	}
+
+	if !t.isDead() {
+		return false, nil
+	}
+
+	t.cancel()
+
+	ctx, cancel := context.WithCancel(ctx)
+	t.ctx = ctx
+	t.cancel = cancel
+	return true, nil
+}
+
+func (t *TimeWindowTask) isDead() bool {
+	if err := t.ctx.Err(); err != nil {
+		return true
+	}
+	return t.state == TimeWindowTaskStateError
 }

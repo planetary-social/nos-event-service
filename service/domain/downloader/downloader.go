@@ -201,7 +201,10 @@ func (d *Downloader) updateDownloaders(ctx context.Context) error {
 			}
 
 			ctx, cancel := context.WithCancel(ctx)
-			go downloader.Run(ctx)
+			if err := downloader.Start(ctx); err != nil {
+				cancel()
+				return errors.Wrap(err, "error starting a downloader")
+			}
 			d.relayDownloaders[relayAddress] = runningRelayDownloader{
 				Context:         ctx,
 				CancelFunc:      cancel,
@@ -265,10 +268,19 @@ func NewRelayDownloader(
 	return v
 }
 
-func (d *RelayDownloader) Run(ctx context.Context) {
-	for task := range d.scheduler.GetTasks(ctx, d.address) {
-		d.performTask(task)
+func (d *RelayDownloader) Start(ctx context.Context) error {
+	ch, err := d.scheduler.GetTasks(ctx, d.address)
+	if err != nil {
+		return errors.Wrap(err, "error getting task channel")
 	}
+
+	go func() {
+		for task := range ch {
+			d.performTask(task)
+		}
+	}()
+
+	return nil
 }
 
 func (d *RelayDownloader) performTask(task Task) {

@@ -33,13 +33,13 @@ type Task interface {
 }
 
 type Scheduler interface {
-	GetTasks(ctx context.Context, relay domain.RelayAddress) <-chan Task
+	GetTasks(ctx context.Context, relay domain.RelayAddress) (<-chan Task, error)
 }
 
 type TaskScheduler struct {
-	taskSubscriptions   []*taskSubscription
-	taskGenerators      map[domain.RelayAddress]*RelayTaskGenerator
-	lock                sync.Mutex
+	taskGeneratorsLock sync.Mutex
+	taskGenerators     map[domain.RelayAddress]*RelayTaskGenerator
+
 	parentCtx           context.Context
 	publicKeySource     PublicKeySource
 	currentTimeProvider CurrentTimeProvider
@@ -61,17 +61,22 @@ func NewTaskScheduler(
 	}
 }
 
-func (t *TaskScheduler) GetTasks(ctx context.Context, relay domain.RelayAddress) <-chan Task {
-	taskSubscription := newTaskSubscription(ctx, relay)
-	t.addTaskSubscription(taskSubscription)
-	return taskSubscription.ch
+func (t *TaskScheduler) GetTasks(ctx context.Context, relay domain.RelayAddress) (<-chan Task, error) {
+	generator, err := t.getOrCreateGeneratorWithLock(relay)
+	if err != nil {
+		return nil, errors.Wrap(err, "error getting a generator")
+	}
+
+	ch := make(chan Task)
+	generator.AddSubscription(ctx, ch)
+	return ch, nil
 }
 
 func (t *TaskScheduler) Run(ctx context.Context) error {
 	for {
 		hadTasks, err := t.sendOutTasks()
 		if err != nil {
-			return errors.Wrap(err, "error sending out generators")
+			return errors.Wrap(err, "error sending out tasks")
 		}
 
 		if hadTasks {
@@ -93,47 +98,27 @@ func (t *TaskScheduler) Run(ctx context.Context) error {
 }
 
 func (t *TaskScheduler) sendOutTasks() (bool, error) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
+	t.taskGeneratorsLock.Lock()
+	defer t.taskGeneratorsLock.Unlock()
 
-	slices.DeleteFunc(t.taskSubscriptions, func(subscription *taskSubscription) bool {
-		select {
-		case <-subscription.ctx.Done():
-			return true
-		default:
-			return false
-		}
-	})
-
-	sentTasksForAtLeastOneSubscription := false
-	for _, taskSubscription := range t.taskSubscriptions {
-		sentTasks, err := t.sendOutTasksForSubscription(taskSubscription)
+	atLeastOneHadTasks := false
+	for _, taskGenerator := range t.taskGenerators {
+		hadTasks, err := taskGenerator.SendOutTasks()
 		if err != nil {
-			return false, errors.Wrap(err, "error sending out generators")
+			return false, errors.Wrap(err, "error calling task generator")
 		}
-		if sentTasks {
-			sentTasksForAtLeastOneSubscription = true
+		if hadTasks {
+			atLeastOneHadTasks = true
 		}
 	}
 
-	return sentTasksForAtLeastOneSubscription, nil
+	return atLeastOneHadTasks, nil
 }
 
-func (t *TaskScheduler) sendOutTasksForSubscription(subscription *taskSubscription) (bool, error) {
-	generator, err := t.getOrCreateGenerator(subscription.address)
-	if err != nil {
-		return false, errors.Wrap(err, "error getting a generator")
-	}
+func (t *TaskScheduler) getOrCreateGeneratorWithLock(address domain.RelayAddress) (*RelayTaskGenerator, error) {
+	t.taskGeneratorsLock.Lock()
+	defer t.taskGeneratorsLock.Unlock()
 
-	n, err := generator.PushTasks(subscription.ctx, subscription.ch)
-	if err != nil {
-		return false, errors.Wrap(err, "error pushing tasks")
-	}
-
-	return n > 0, nil
-}
-
-func (t *TaskScheduler) getOrCreateGenerator(address domain.RelayAddress) (*RelayTaskGenerator, error) {
 	v, ok := t.taskGenerators[address]
 	if ok {
 		return v, nil
@@ -147,29 +132,22 @@ func (t *TaskScheduler) getOrCreateGenerator(address domain.RelayAddress) (*Rela
 	return v, nil
 }
 
-func (t *TaskScheduler) addTaskSubscription(taskSubscription *taskSubscription) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	t.taskSubscriptions = append(t.taskSubscriptions, taskSubscription)
-}
-
 type taskSubscription struct {
-	ctx     context.Context
-	ch      chan Task
-	address domain.RelayAddress
+	ctx context.Context
+	ch  chan Task
 }
 
-func newTaskSubscription(ctx context.Context, address domain.RelayAddress) *taskSubscription {
+func newTaskSubscription(ctx context.Context, ch chan Task) *taskSubscription {
 	return &taskSubscription{
-		ctx:     ctx,
-		ch:      make(chan Task),
-		address: address,
+		ctx: ctx,
+		ch:  ch,
 	}
 }
 
 type RelayTaskGenerator struct {
 	lock sync.Mutex
+
+	taskSubscriptions []*taskSubscription
 
 	globalTask *TimeWindowTaskGenerator
 	authorTask *TimeWindowTaskGenerator
@@ -225,7 +203,42 @@ func NewRelayTaskGenerator(
 	}, nil
 }
 
-func (t *RelayTaskGenerator) PushTasks(ctx context.Context, ch chan<- Task) (int, error) {
+func (t *RelayTaskGenerator) AddSubscription(ctx context.Context, ch chan Task) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	taskSubscription := newTaskSubscription(ctx, ch)
+	t.taskSubscriptions = append(t.taskSubscriptions, taskSubscription)
+}
+
+func (t *RelayTaskGenerator) SendOutTasks() (bool, error) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	slices.DeleteFunc(t.taskSubscriptions, func(subscription *taskSubscription) bool {
+		select {
+		case <-subscription.ctx.Done():
+			return true
+		default:
+			return false
+		}
+	})
+
+	sentTasksForAtLeastOneSubscription := false
+	for _, taskSubscription := range t.taskSubscriptions {
+		numberOfSentTasks, err := t.pushTasks(taskSubscription.ctx, taskSubscription.ch)
+		if err != nil {
+			return false, errors.Wrap(err, "error sending out generators")
+		}
+		if numberOfSentTasks > 0 {
+			sentTasksForAtLeastOneSubscription = true
+		}
+	}
+
+	return sentTasksForAtLeastOneSubscription, nil
+}
+
+func (t *RelayTaskGenerator) pushTasks(ctx context.Context, ch chan<- Task) (int, error) {
 	tasks, err := t.getTasksToPush(ctx)
 	if err != nil {
 		return 0, errors.Wrap(err, "error getting tasks to push")
@@ -243,16 +256,13 @@ func (t *RelayTaskGenerator) PushTasks(ctx context.Context, ch chan<- Task) (int
 }
 
 func (t *RelayTaskGenerator) getTasksToPush(ctx context.Context) ([]Task, error) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
 	if err := t.updateFilters(ctx); err != nil {
 		return nil, errors.Wrap(err, "error updating filters")
 	}
 
 	var result []Task
 	for _, generator := range t.generators() {
-		tasks, err := generator.Generate()
+		tasks, err := generator.Generate(ctx)
 		if err != nil {
 			return nil, errors.Wrap(err, "error calling one of the generators")
 		}
@@ -291,10 +301,9 @@ type TimeWindowTaskGenerator struct {
 	authors []domain.PublicKey
 
 	lastWindow             TimeWindow
-	runningTimeWindowTasks []*createdTimeWindowTask
+	runningTimeWindowTasks []*TimeWindowTask
 	lock                   sync.Mutex
 
-	taskCtx             context.Context
 	currentTimeProvider CurrentTimeProvider
 }
 
@@ -313,7 +322,6 @@ func NewTimeWindowTaskGenerator(
 	}
 
 	return &TimeWindowTaskGenerator{
-		taskCtx:             taskCtx,
 		lastWindow:          startingWindow,
 		kinds:               kinds,
 		tags:                tags,
@@ -322,29 +330,34 @@ func NewTimeWindowTaskGenerator(
 	}, nil
 }
 
-func (t *TimeWindowTaskGenerator) Generate() ([]Task, error) {
+func (t *TimeWindowTaskGenerator) Generate(ctx context.Context) ([]Task, error) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	t.runningTimeWindowTasks = slices.DeleteFunc(t.runningTimeWindowTasks, func(task *createdTimeWindowTask) bool {
+	t.runningTimeWindowTasks = slices.DeleteFunc(t.runningTimeWindowTasks, func(task *TimeWindowTask) bool {
 		return task.CheckIfDoneAndEnd()
 	})
 
+	var result []Task
+
 	for i := len(t.runningTimeWindowTasks); i < timeWindowTaskConcurrency; i++ {
-		task, ok := t.generateNewTask()
+		task, ok, err := t.maybeGenerateNewTask(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "error generating a new task")
+		}
 		if ok {
 			t.runningTimeWindowTasks = append(t.runningTimeWindowTasks, task)
+			result = append(result, task)
 		}
 	}
 
-	var result []Task
 	for _, task := range t.runningTimeWindowTasks {
-		t, ok, err := task.MaybeReset(t.taskCtx)
+		ok, err := task.MaybeReset(ctx)
 		if err != nil {
 			return nil, errors.Wrap(err, "error resetting a task")
 		}
 		if ok {
-			result = append(result, t)
+			result = append(result, task)
 		}
 	}
 	return result, nil
@@ -364,64 +377,16 @@ func (t *TimeWindowTaskGenerator) UpdateAuthors(authors []domain.PublicKey) {
 	t.authors = authors
 }
 
-func (t *TimeWindowTaskGenerator) generateNewTask() (*createdTimeWindowTask, bool) {
+func (t *TimeWindowTaskGenerator) maybeGenerateNewTask(ctx context.Context) (*TimeWindowTask, bool, error) {
 	nextWindow := t.lastWindow.Advance()
 	now := t.currentTimeProvider.GetCurrentTime()
 	if nextWindow.End().After(now.Add(-time.Minute)) {
-		return nil, false
+		return nil, false, nil
 	}
 	t.lastWindow = nextWindow
-	return newCreatedTimeWindowTask(t.kinds, t.tags, t.authors, nextWindow), true
-	return
-}
-
-type createdTimeWindowTask struct {
-	kinds   []domain.EventKind
-	tags    []domain.FilterTag
-	authors []domain.PublicKey
-	window  TimeWindow
-
-	task *TimeWindowTask
-}
-
-func newCreatedTimeWindowTask(
-	kinds []domain.EventKind,
-	tags []domain.FilterTag,
-	authors []domain.PublicKey,
-	window TimeWindow,
-) *createdTimeWindowTask {
-	return &createdTimeWindowTask{
-		kinds:   kinds,
-		tags:    tags,
-		authors: authors,
-		window:  window,
+	v, err := NewTimeWindowTask(ctx, t.kinds, t.tags, t.authors, nextWindow)
+	if err != nil {
+		return nil, false, errors.Wrap(err, "error creating a task")
 	}
-}
-
-func (t *createdTimeWindowTask) CheckIfDoneAndEnd() bool {
-	if t.task == nil {
-		return false
-	}
-	if t.task.State() == TimeWindowTaskStateDone {
-		t.task.End()
-		return true
-	}
-	return false
-}
-
-func (t *createdTimeWindowTask) MaybeReset(taskCtx context.Context) (Task, bool, error) {
-	if t.task == nil || t.task.State() != TimeWindowTaskStateStarted {
-		task, err := NewTimeWindowTask(taskCtx, t.kinds, t.tags, t.authors, t.window)
-		if err != nil {
-			return nil, false, errors.Wrap(err, "error creating a new time window task")
-		}
-
-		if t.task != nil {
-			t.task.End()
-		}
-
-		t.task = task
-		return task, true, nil
-	}
-	return nil, false, nil
+	return v, true, nil
 }
