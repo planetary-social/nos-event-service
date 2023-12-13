@@ -19,4 +19,5 @@ func TestTimeWindow(t *testing.T) {
 	second := first.Advance()
 	require.Equal(t, start.Add(time.Minute), second.Start())
 	require.Equal(t, start.Add(2*time.Minute), second.End())
+	require.True(t, second.Start().Equal(first.End()))
 }
