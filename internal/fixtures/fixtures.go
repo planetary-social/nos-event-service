@@ -8,11 +8,13 @@ import (
 	"math/rand"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/planetary-social/nos-event-service/internal"
 	"github.com/planetary-social/nos-event-service/internal/logging"
 	"github.com/planetary-social/nos-event-service/service/domain"
+	"github.com/planetary-social/nos-event-service/service/domain/downloader"
 	"github.com/stretchr/testify/require"
 )
 
@@ -184,6 +186,18 @@ func SomeEventKind() domain.EventKind {
 
 func SomeMaybeRelayAddress() domain.MaybeRelayAddress {
 	return domain.NewMaybeRelayAddress(SomeString())
+}
+
+func SomeTimeWindow() downloader.TimeWindow {
+	return downloader.MustNewTimeWindow(SomeTime(), SomeDuration())
+}
+
+func SomeTime() time.Time {
+	return time.Unix(int64(rand.Intn(10000000)), 0)
+}
+
+func SomeDuration() time.Duration {
+	return time.Duration(rand.Intn(100)) * time.Second
 }
 
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")

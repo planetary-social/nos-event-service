@@ -75,7 +75,9 @@ func (t *TimeWindowTask) OnError(err error) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	t.state = TimeWindowTaskStateError
+	if t.state != TimeWindowTaskStateDone {
+		t.state = TimeWindowTaskStateError
+	}
 }
 
 func (t *TimeWindowTask) CheckIfDoneAndEnd() bool {
