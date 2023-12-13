@@ -92,7 +92,7 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	cachedDatabasePublicKeySource := newCachedPublicKeySource(databasePublicKeySource)
 	receivedEventPubSub := memorypubsub.NewReceivedEventPubSub()
 	currentTimeProvider := adapters.NewCurrentTimeProvider()
-	taskScheduler := downloader.NewTaskScheduler(contextContext, cachedDatabasePublicKeySource, currentTimeProvider, logger)
+	taskScheduler := downloader.NewTaskScheduler(cachedDatabasePublicKeySource, currentTimeProvider, logger)
 	relayDownloaderFactory := downloader.NewRelayDownloaderFactory(relayConnections, receivedEventPubSub, taskScheduler, logger, prometheusPrometheus)
 	downloaderDownloader := downloader.NewDownloader(bootstrapRelaySource, databaseRelaySource, cachedDatabasePublicKeySource, logger, prometheusPrometheus, relayDownloaderFactory)
 	receivedEventSubscriber := memorypubsub2.NewReceivedEventSubscriber(receivedEventPubSub, saveReceivedEventHandler, logger)

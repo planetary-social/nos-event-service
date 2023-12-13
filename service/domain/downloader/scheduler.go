@@ -14,7 +14,7 @@ import (
 const (
 	sendOutTasksEvery = 10 * time.Millisecond
 
-	initialWindowAge = 2 * time.Minute
+	initialWindowAge = 2 * time.Minute // todo
 	windowSize       = 1 * time.Minute
 
 	timeWindowTaskConcurrency = 1
@@ -46,7 +46,6 @@ type TaskScheduler struct {
 }
 
 func NewTaskScheduler(
-	parentCtx context.Context,
 	publicKeySource PublicKeySource,
 	currentTimeProvider CurrentTimeProvider,
 	logger logging.Logger,
