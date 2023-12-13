@@ -37,21 +37,23 @@ type Scheduler interface {
 }
 
 type TaskScheduler struct {
-	taskSubscriptions []*taskSubscription
-	taskGenerators    map[domain.RelayAddress]*RelayTaskGenerator
-	lock              sync.Mutex
-
+	taskSubscriptions   []*taskSubscription
+	taskGenerators      map[domain.RelayAddress]*RelayTaskGenerator
+	lock                sync.Mutex
+	parentCtx           context.Context
 	publicKeySource     PublicKeySource
 	currentTimeProvider CurrentTimeProvider
 	logger              logging.Logger
 }
 
 func NewTaskScheduler(
+	parentCtx context.Context,
 	publicKeySource PublicKeySource,
 	currentTimeProvider CurrentTimeProvider,
 	logger logging.Logger,
 ) *TaskScheduler {
 	return &TaskScheduler{
+		parentCtx:           parentCtx,
 		taskGenerators:      make(map[domain.RelayAddress]*RelayTaskGenerator),
 		publicKeySource:     publicKeySource,
 		currentTimeProvider: currentTimeProvider,
@@ -129,7 +131,7 @@ func (t *TaskScheduler) getOrCreateGenerator(address domain.RelayAddress) (*Rela
 		return v, nil
 	}
 
-	v, err := NewRelayTaskGenerator(t.publicKeySource, t.currentTimeProvider, t.logger)
+	v, err := NewRelayTaskGenerator(t.parentCtx, t.publicKeySource, t.currentTimeProvider, t.logger)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating a task generator")
 	}
@@ -170,11 +172,13 @@ type RelayTaskGenerator struct {
 }
 
 func NewRelayTaskGenerator(
+	taskCtx context.Context,
 	publicKeySource PublicKeySource,
 	currentTimeProvider CurrentTimeProvider,
 	logger logging.Logger,
 ) (*RelayTaskGenerator, error) {
 	globalTask, err := NewTimeWindowTaskGenerator(
+		taskCtx,
 		globalEventKindsToDownload,
 		nil,
 		nil,
@@ -184,6 +188,7 @@ func NewRelayTaskGenerator(
 		return nil, errors.Wrap(err, "error creating the global task")
 	}
 	authorTask, err := NewTimeWindowTaskGenerator(
+		taskCtx,
 		nil,
 		nil,
 		nil,
@@ -193,6 +198,7 @@ func NewRelayTaskGenerator(
 		return nil, errors.Wrap(err, "error creating the author task")
 	}
 	tagTask, err := NewTimeWindowTaskGenerator(
+		taskCtx,
 		nil,
 		nil,
 		nil,
@@ -280,10 +286,12 @@ type TimeWindowTaskGenerator struct {
 	runningTimeWindowTasks []*createdTimeWindowTask
 	lock                   sync.Mutex
 
+	taskCtx             context.Context
 	currentTimeProvider CurrentTimeProvider
 }
 
 func NewTimeWindowTaskGenerator(
+	taskCtx context.Context,
 	kinds []domain.EventKind,
 	tags []domain.FilterTag,
 	authors []domain.PublicKey,
@@ -297,6 +305,7 @@ func NewTimeWindowTaskGenerator(
 	}
 
 	return &TimeWindowTaskGenerator{
+		taskCtx:             taskCtx,
 		lastWindow:          startingWindow,
 		kinds:               kinds,
 		tags:                tags,
@@ -310,7 +319,7 @@ func (t *TimeWindowTaskGenerator) Generate() ([]Task, error) {
 	defer t.lock.Unlock()
 
 	t.runningTimeWindowTasks = slices.DeleteFunc(t.runningTimeWindowTasks, func(task *createdTimeWindowTask) bool {
-		return task.Done()
+		return task.CheckIfDoneAndEnd()
 	})
 
 	for i := len(t.runningTimeWindowTasks); i < timeWindowTaskConcurrency; i++ {
@@ -322,7 +331,7 @@ func (t *TimeWindowTaskGenerator) Generate() ([]Task, error) {
 
 	var result []Task
 	for _, task := range t.runningTimeWindowTasks {
-		t, ok, err := task.MaybeReset()
+		t, ok, err := task.MaybeReset(t.taskCtx)
 		if err != nil {
 			return nil, errors.Wrap(err, "error resetting a task")
 		}
@@ -380,19 +389,28 @@ func newCreatedTimeWindowTask(
 	}
 }
 
-func (t *createdTimeWindowTask) Done() bool {
+func (t *createdTimeWindowTask) CheckIfDoneAndEnd() bool {
 	if t.task == nil {
 		return false
 	}
-	return t.task.State() == TimeWindowTaskStateDone
+	if t.task.State() == TimeWindowTaskStateDone {
+		t.task.End()
+		return true
+	}
+	return false
 }
 
-func (t *createdTimeWindowTask) MaybeReset() (Task, bool, error) {
+func (t *createdTimeWindowTask) MaybeReset(taskCtx context.Context) (Task, bool, error) {
 	if t.task == nil || t.task.State() != TimeWindowTaskStateStarted {
-		task, err := NewTimeWindowTask(t.kinds, t.tags, t.authors, t.window)
+		task, err := NewTimeWindowTask(taskCtx, t.kinds, t.tags, t.authors, t.window)
 		if err != nil {
 			return nil, false, errors.Wrap(err, "error creating a new time window task")
 		}
+
+		if t.task != nil {
+			t.task.End()
+		}
+
 		t.task = task
 		return task, true, nil
 	}

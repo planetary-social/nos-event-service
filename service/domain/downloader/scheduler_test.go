@@ -11,6 +11,7 @@ import (
 	"github.com/planetary-social/nos-event-service/service/adapters/mocks"
 	"github.com/planetary-social/nos-event-service/service/domain"
 	"github.com/planetary-social/nos-event-service/service/domain/downloader"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -132,6 +133,50 @@ forloop:
 	require.Equal(t, date(2023, time.December, 27, 10, 29, 00), lastWindow.End().UTC())
 }
 
+func TestTaskScheduler_TerminatesTasks(t *testing.T) {
+	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), 5*time.Second)
+	defer cancel()
+
+	start := date(2023, time.December, 27, 10, 30, 00)
+
+	ts := newTestedTaskScheduler(ctx, t)
+	ts.CurrentTimeProvider.SetCurrentTime(start)
+
+	ch := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
+
+	firstTaskCh := make(chan downloader.Task)
+
+	go func() {
+		first := true
+		for {
+			select {
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			case v := <-ch:
+				v.OnReceivedEOSE()
+				if first {
+					first = false
+					select {
+					case firstTaskCh <- v:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	select {
+	case v := <-firstTaskCh:
+		require.EventuallyWithT(t, func(collect *assert.CollectT) {
+			assert.Error(collect, v.Ctx().Err())
+		}, 5*time.Second, 10*time.Millisecond)
+	case <-ctx.Done():
+		t.Fatal("timeout")
+	}
+
+}
+
 type testedTaskScheduler struct {
 	Scheduler           *downloader.TaskScheduler
 	CurrentTimeProvider *mocks.CurrentTimeProvider
@@ -141,7 +186,7 @@ func newTestedTaskScheduler(ctx context.Context, tb testing.TB) *testedTaskSched
 	currentTimeProvider := mocks.NewCurrentTimeProvider()
 	source := newMockPublicKeySource()
 	logger := logging.NewDevNullLogger()
-	scheduler := downloader.NewTaskScheduler(source, currentTimeProvider, logger)
+	scheduler := downloader.NewTaskScheduler(ctx, source, currentTimeProvider, logger)
 	go func() {
 		_ = scheduler.Run(ctx)
 	}()

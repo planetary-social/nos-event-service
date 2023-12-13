@@ -20,12 +20,15 @@ type TimeWindowTaskState struct {
 }
 
 type TimeWindowTask struct {
+	ctx    context.Context
+	cancel context.CancelFunc
 	filter domain.Filter
 	state  TimeWindowTaskState
 	lock   sync.Mutex
 }
 
 func NewTimeWindowTask(
+	ctx context.Context,
 	kinds []domain.EventKind,
 	tags []domain.FilterTag,
 	authors []domain.PublicKey,
@@ -43,14 +46,18 @@ func NewTimeWindowTask(
 		return nil, errors.Wrap(err, "error creating a filter")
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+
 	return &TimeWindowTask{
+		ctx:    ctx,
+		cancel: cancel,
 		filter: filter,
 		state:  TimeWindowTaskStateStarted,
 	}, nil
 }
 
 func (t *TimeWindowTask) Ctx() context.Context {
-	return context.TODO()
+	return t.ctx
 }
 
 func (t *TimeWindowTask) Filter() domain.Filter {
@@ -76,4 +83,11 @@ func (t *TimeWindowTask) State() TimeWindowTaskState {
 	defer t.lock.Unlock()
 
 	return t.state
+}
+
+func (t *TimeWindowTask) End() {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	t.cancel()
 }
