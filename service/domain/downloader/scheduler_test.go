@@ -171,7 +171,7 @@ forloop:
 			duration := v.Filter().Until().Sub(*v.Filter().Since())
 			window := downloader.MustNewTimeWindow(*start, duration)
 			windows = append(windows, window)
-			v.OnReceivedEOSE()
+			go v.OnReceivedEOSE()
 		case <-time.After(1 * time.Second):
 			t.Log("no new tasks for a short while, assuming that scheduler is waiting for them to complete")
 			break forloop
