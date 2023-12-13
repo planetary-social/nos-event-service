@@ -14,7 +14,7 @@ import (
 const (
 	sendOutTasksEvery = 10 * time.Millisecond
 
-	initialWindowAge = 1 * time.Hour
+	initialWindowAge = 2 * time.Minute
 	windowSize       = 1 * time.Minute
 
 	timeWindowTaskConcurrency = 1
@@ -40,7 +40,6 @@ type TaskScheduler struct {
 	taskGeneratorsLock sync.Mutex
 	taskGenerators     map[domain.RelayAddress]*RelayTaskGenerator
 
-	parentCtx           context.Context
 	publicKeySource     PublicKeySource
 	currentTimeProvider CurrentTimeProvider
 	logger              logging.Logger
@@ -53,7 +52,6 @@ func NewTaskScheduler(
 	logger logging.Logger,
 ) *TaskScheduler {
 	return &TaskScheduler{
-		parentCtx:           parentCtx,
 		taskGenerators:      make(map[domain.RelayAddress]*RelayTaskGenerator),
 		publicKeySource:     publicKeySource,
 		currentTimeProvider: currentTimeProvider,
@@ -124,7 +122,7 @@ func (t *TaskScheduler) getOrCreateGeneratorWithLock(address domain.RelayAddress
 		return v, nil
 	}
 
-	v, err := NewRelayTaskGenerator(t.parentCtx, t.publicKeySource, t.currentTimeProvider, t.logger)
+	v, err := NewRelayTaskGenerator(t.publicKeySource, t.currentTimeProvider, t.logger)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating a task generator")
 	}
