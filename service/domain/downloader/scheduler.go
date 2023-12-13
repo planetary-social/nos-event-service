@@ -158,13 +158,11 @@ type RelayTaskGenerator struct {
 }
 
 func NewRelayTaskGenerator(
-	taskCtx context.Context,
 	publicKeySource PublicKeySource,
 	currentTimeProvider CurrentTimeProvider,
 	logger logging.Logger,
 ) (*RelayTaskGenerator, error) {
 	globalTask, err := NewTimeWindowTaskGenerator(
-		taskCtx,
 		globalEventKindsToDownload,
 		nil,
 		nil,
@@ -174,7 +172,6 @@ func NewRelayTaskGenerator(
 		return nil, errors.Wrap(err, "error creating the global task")
 	}
 	authorTask, err := NewTimeWindowTaskGenerator(
-		taskCtx,
 		nil,
 		nil,
 		nil,
@@ -184,7 +181,6 @@ func NewRelayTaskGenerator(
 		return nil, errors.Wrap(err, "error creating the author task")
 	}
 	tagTask, err := NewTimeWindowTaskGenerator(
-		taskCtx,
 		nil,
 		nil,
 		nil,
@@ -308,7 +304,6 @@ type TimeWindowTaskGenerator struct {
 }
 
 func NewTimeWindowTaskGenerator(
-	taskCtx context.Context,
 	kinds []domain.EventKind,
 	tags []domain.FilterTag,
 	authors []domain.PublicKey,

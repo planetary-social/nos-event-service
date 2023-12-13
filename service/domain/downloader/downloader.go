@@ -284,13 +284,6 @@ func (d *RelayDownloader) Start(ctx context.Context) error {
 }
 
 func (d *RelayDownloader) performTask(task Task) {
-	l := d.logger.
-		WithField("since", task.Filter().Since()).
-		WithField("until", task.Filter().Until())
-
-	l.Debug().Message("starting task")
-	defer l.Debug().Message("ending task")
-
 	if err := d.performTaskWithErr(task); err != nil {
 		d.logger.Error().WithError(err).Message("error downloading messages")
 		task.OnError(err)
