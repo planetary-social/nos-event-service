@@ -96,8 +96,16 @@ func (t *TaskScheduler) sendOutTasks() (bool, error) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	sentTasksForAtLeastOneSubscription := false
+	slices.DeleteFunc(t.taskSubscriptions, func(subscription *taskSubscription) bool {
+		select {
+		case <-subscription.ctx.Done():
+			return true
+		default:
+			return false
+		}
+	})
 
+	sentTasksForAtLeastOneSubscription := false
 	for _, taskSubscription := range t.taskSubscriptions {
 		sentTasks, err := t.sendOutTasksForSubscription(taskSubscription)
 		if err != nil {
@@ -116,7 +124,7 @@ func (t *TaskScheduler) sendOutTasksForSubscription(subscription *taskSubscripti
 	if err != nil {
 		return false, errors.Wrap(err, "error getting a generator")
 	}
-	// todo cleanup subs
+
 	n, err := generator.PushTasks(subscription.ctx, subscription.ch)
 	if err != nil {
 		return false, errors.Wrap(err, "error pushing tasks")
@@ -364,6 +372,7 @@ func (t *TimeWindowTaskGenerator) generateNewTask() (*createdTimeWindowTask, boo
 	}
 	t.lastWindow = nextWindow
 	return newCreatedTimeWindowTask(t.kinds, t.tags, t.authors, nextWindow), true
+	return
 }
 
 type createdTimeWindowTask struct {
