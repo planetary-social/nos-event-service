@@ -113,7 +113,7 @@ forloop:
 			duration := v.Filter().Until().Sub(*v.Filter().Since())
 			window := downloader.MustNewTimeWindow(*start, duration)
 			filters[window] = append(filters[window], v.Filter())
-			v.OnReceivedEOSE()
+			go v.OnReceivedEOSE()
 		case <-time.After(1 * time.Second):
 			t.Log("no new tasks for a short while, assuming that scheduler is waiting for them to complete")
 			break forloop
@@ -210,7 +210,7 @@ func TestTaskScheduler_TerminatesTasks(t *testing.T) {
 			case <-ctx.Done():
 				return
 			case v := <-ch:
-				v.OnReceivedEOSE()
+				go v.OnReceivedEOSE()
 				if first {
 					first = false
 					select {
