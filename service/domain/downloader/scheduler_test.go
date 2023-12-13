@@ -257,9 +257,11 @@ func date(year int, month time.Month, day, hour, min, sec int) time.Time {
 
 func assertEqualWindows(tb require.TestingT, a, b []downloader.TimeWindow) {
 	assert.Equal(tb, len(a), len(b))
-	for i := 0; i < len(a); i++ {
-		assert.True(tb, a[i].Start().Equal(b[i].Start()))
-		assert.True(tb, a[i].End().Equal(b[i].End()))
+	if len(a) == len(b) {
+		for i := 0; i < len(a); i++ {
+			assert.True(tb, a[i].Start().Equal(b[i].Start()))
+			assert.True(tb, a[i].End().Equal(b[i].End()))
+		}
 	}
 }
 
