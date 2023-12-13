@@ -197,7 +197,7 @@ func SomeTime() time.Time {
 }
 
 func SomeDuration() time.Duration {
-	return time.Duration(rand.Intn(100)) * time.Second
+	return time.Duration(1+rand.Intn(100)) * time.Second
 }
 
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
