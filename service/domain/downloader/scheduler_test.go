@@ -182,6 +182,7 @@ forloop:
 		return a.Start().Compare(b.Start())
 	})
 
+	require.Len(t, windows, 59)
 	lastWindow := windows[len(windows)-1]
 	require.Equal(t, date(2023, time.December, 27, 10, 29, 00), lastWindow.End().UTC())
 }
