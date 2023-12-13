@@ -15,12 +15,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const numberOfTaskTypes = 3
+const (
+	numberOfTaskTypes                           = 3
+	testTimeout                                 = 10 * time.Second
+	delayWhenWaitingToConsiderThatTasksReceived = 5 * time.Second
+)
 
 func TestTaskScheduler_SchedulerWaitsForTasksToCompleteBeforeProducingMore(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), 5*time.Second)
+	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), testTimeout)
 	defer cancel()
 
 	start := date(2023, time.December, 27, 10, 30, 00)
@@ -35,27 +39,14 @@ func TestTaskScheduler_SchedulerWaitsForTasksToCompleteBeforeProducingMore(t *te
 	ch, err := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
 	require.NoError(t, err)
 
-	var filters []domain.Filter
-forloop:
-	for {
-		select {
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
-		case v := <-ch:
-			filters = append(filters, v.Filter())
-		case <-time.After(1 * time.Second):
-			t.Log("no new tasks for a short while, assuming that scheduler is waiting for them to complete")
-			break forloop
-		}
-	}
-
-	require.Equal(t, numberOfTaskTypes, len(filters))
+	tasks := collectAllTasks(t, ctx, ch, false)
+	require.Equal(t, numberOfTaskTypes, len(tasks))
 }
 
 func TestTaskScheduler_SchedulerDoesNotProduceEmptyTasks(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), 5*time.Second)
+	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), testTimeout)
 	defer cancel()
 
 	start := date(2023, time.December, 27, 10, 30, 00)
@@ -67,27 +58,14 @@ func TestTaskScheduler_SchedulerDoesNotProduceEmptyTasks(t *testing.T) {
 	ch, err := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
 	require.NoError(t, err)
 
-	var filters []domain.Filter
-forloop:
-	for {
-		select {
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
-		case v := <-ch:
-			filters = append(filters, v.Filter())
-		case <-time.After(1 * time.Second):
-			t.Log("no new tasks for a short while, assuming that scheduler is waiting for them to complete")
-			break forloop
-		}
-	}
-
-	require.Equal(t, 1, len(filters))
+	tasks := collectAllTasks(t, ctx, ch, false)
+	require.Equal(t, 1, len(tasks))
 }
 
 func TestTaskScheduler_SchedulerProducesTasksFromSequentialTimeWindowsLeadingUpToCurrentTime(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), 5*time.Second)
+	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), testTimeout)
 	defer cancel()
 
 	start := date(2023, time.December, 27, 10, 30, 00)
@@ -102,22 +80,14 @@ func TestTaskScheduler_SchedulerProducesTasksFromSequentialTimeWindowsLeadingUpT
 	ch, err := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
 	require.NoError(t, err)
 
+	tasks := collectAllTasks(t, ctx, ch, true)
+
 	filters := make(map[downloader.TimeWindow][]domain.Filter)
-forloop:
-	for {
-		select {
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
-		case v := <-ch:
-			start := v.Filter().Since()
-			duration := v.Filter().Until().Sub(*v.Filter().Since())
-			window := downloader.MustNewTimeWindow(*start, duration)
-			filters[window] = append(filters[window], v.Filter())
-			go v.OnReceivedEOSE()
-		case <-time.After(1 * time.Second):
-			t.Log("no new tasks for a short while, assuming that scheduler is waiting for them to complete")
-			break forloop
-		}
+	for _, task := range tasks {
+		start := task.Filter().Since()
+		duration := task.Filter().Until().Sub(*start)
+		window := downloader.MustNewTimeWindow(*start, duration)
+		filters[window] = append(filters[window], task.Filter())
 	}
 
 	firstWindowStart := date(2023, time.December, 27, 9, 30, 00)
@@ -145,7 +115,7 @@ forloop:
 func TestTaskScheduler_ThereIsOneWindowOfDelayToLetRelaysSyncData(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), 5*time.Second)
+	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), testTimeout)
 	defer cancel()
 
 	start := date(2023, time.December, 27, 10, 30, 00)
@@ -160,22 +130,14 @@ func TestTaskScheduler_ThereIsOneWindowOfDelayToLetRelaysSyncData(t *testing.T) 
 	ch, err := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
 	require.NoError(t, err)
 
+	tasks := collectAllTasks(t, ctx, ch, true)
+
 	var windows []downloader.TimeWindow
-forloop:
-	for {
-		select {
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
-		case v := <-ch:
-			start := v.Filter().Since()
-			duration := v.Filter().Until().Sub(*v.Filter().Since())
-			window := downloader.MustNewTimeWindow(*start, duration)
-			windows = append(windows, window)
-			go v.OnReceivedEOSE()
-		case <-time.After(1 * time.Second):
-			t.Log("no new tasks for a short while, assuming that scheduler is waiting for them to complete")
-			break forloop
-		}
+	for _, task := range tasks {
+		start := task.Filter().Since()
+		duration := task.Filter().Until().Sub(*start)
+		window := downloader.MustNewTimeWindow(*start, duration)
+		windows = append(windows, window)
 	}
 
 	slices.SortFunc(windows, func(a, b downloader.TimeWindow) int {
@@ -190,7 +152,7 @@ forloop:
 func TestTaskScheduler_TerminatesTasks(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), 5*time.Second)
+	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), testTimeout)
 	defer cancel()
 
 	start := date(2023, time.December, 27, 10, 30, 00)
@@ -283,5 +245,23 @@ func requireEqualWindows(tb testing.TB, a, b []downloader.TimeWindow) {
 	for i := 0; i < len(a); i++ {
 		require.True(tb, a[i].Start().Equal(b[i].Start()))
 		require.True(tb, a[i].End().Equal(b[i].End()))
+	}
+}
+
+func collectAllTasks(t *testing.T, ctx context.Context, ch <-chan downloader.Task, ackAll bool) []downloader.Task {
+	var tasks []downloader.Task
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case task := <-ch:
+			if ackAll {
+				go task.OnReceivedEOSE()
+			}
+			tasks = append(tasks, task)
+		case <-time.After(delayWhenWaitingToConsiderThatTasksReceived):
+			t.Log("no new tasks for a short while, assuming that scheduler is gave us all tasks and waiting for the current ones to be completed")
+			return tasks
+		}
 	}
 }
