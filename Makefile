@@ -17,6 +17,10 @@ fmt:
 test:
 	go test -race ./...
 
+.PHONY: test-nocache
+test-nocache:
+	go test -race -count=1 ./...
+
 .PHONY: test-bench
 test-bench:
 	go test -v -race -run="^$$" -bench=. -benchtime=1x ./...

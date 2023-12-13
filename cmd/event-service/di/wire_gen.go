@@ -89,9 +89,12 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	bootstrapRelaySource := relays.NewBootstrapRelaySource()
 	databaseRelaySource := app.NewDatabaseRelaySource(genericTransactionProvider, logger)
 	databasePublicKeySource := app.NewDatabasePublicKeySource(genericTransactionProvider, logger)
+	cachedDatabasePublicKeySource := newCachedPublicKeySource(databasePublicKeySource)
 	receivedEventPubSub := memorypubsub.NewReceivedEventPubSub()
-	relayDownloaderFactory := downloader.NewRelayDownloaderFactory(relayConnections, receivedEventPubSub, logger, prometheusPrometheus)
-	downloaderDownloader := downloader.NewDownloader(bootstrapRelaySource, databaseRelaySource, databasePublicKeySource, logger, prometheusPrometheus, relayDownloaderFactory)
+	currentTimeProvider := adapters.NewCurrentTimeProvider()
+	taskScheduler := downloader.NewTaskScheduler(cachedDatabasePublicKeySource, currentTimeProvider, logger)
+	relayDownloaderFactory := downloader.NewRelayDownloaderFactory(relayConnections, receivedEventPubSub, taskScheduler, logger, prometheusPrometheus)
+	downloaderDownloader := downloader.NewDownloader(bootstrapRelaySource, databaseRelaySource, cachedDatabasePublicKeySource, logger, prometheusPrometheus, relayDownloaderFactory)
 	receivedEventSubscriber := memorypubsub2.NewReceivedEventSubscriber(receivedEventPubSub, saveReceivedEventHandler, logger)
 	eventSavedEventSubscriber := sqlitepubsub.NewEventSavedEventSubscriber(processSavedEventHandler, subscriber, logger, prometheusPrometheus)
 	metrics := timer.NewMetrics(application, logger)
@@ -108,7 +111,7 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 		return Service{}, nil, err
 	}
 	loggingMigrationsProgressCallback := adapters.NewLoggingMigrationsProgressCallback(logger)
-	service := NewService(application, server, downloaderDownloader, receivedEventSubscriber, eventSavedEventSubscriber, metrics, transactionRunner, runner, migrationsMigrations, loggingMigrationsProgressCallback)
+	service := NewService(application, server, downloaderDownloader, receivedEventSubscriber, eventSavedEventSubscriber, metrics, transactionRunner, taskScheduler, runner, migrationsMigrations, loggingMigrationsProgressCallback)
 	return service, func() {
 		cleanup()
 	}, nil
@@ -261,6 +264,10 @@ type buildTransactionSqliteAdaptersDependencies struct {
 	Logger logging.Logger
 }
 
-var downloaderSet = wire.NewSet(downloader.NewRelayDownloaderFactory, downloader.NewDownloader, relays.NewBootstrapRelaySource, wire.Bind(new(downloader.BootstrapRelaySource), new(*relays.BootstrapRelaySource)), app.NewDatabaseRelaySource, wire.Bind(new(downloader.RelaySource), new(*app.DatabaseRelaySource)), relays.NewRelayConnections, wire.Bind(new(downloader.RelayConnections), new(*relays.RelayConnections)), app.NewDatabasePublicKeySource, wire.Bind(new(downloader.PublicKeySource), new(*app.DatabasePublicKeySource)), relays.NewEventSender, wire.Bind(new(app.EventSender), new(*relays.EventSender)))
+var downloaderSet = wire.NewSet(downloader.NewRelayDownloaderFactory, downloader.NewDownloader, relays.NewBootstrapRelaySource, wire.Bind(new(downloader.BootstrapRelaySource), new(*relays.BootstrapRelaySource)), app.NewDatabaseRelaySource, wire.Bind(new(downloader.RelaySource), new(*app.DatabaseRelaySource)), relays.NewRelayConnections, wire.Bind(new(downloader.RelayConnections), new(*relays.RelayConnections)), app.NewDatabasePublicKeySource, newCachedPublicKeySource, wire.Bind(new(downloader.PublicKeySource), new(*app.CachedDatabasePublicKeySource)), relays.NewEventSender, wire.Bind(new(app.EventSender), new(*relays.EventSender)), downloader.NewTaskScheduler, wire.Bind(new(downloader.Scheduler), new(*downloader.TaskScheduler)))
+
+func newCachedPublicKeySource(underlying *app.DatabasePublicKeySource) *app.CachedDatabasePublicKeySource {
+	return app.NewCachedDatabasePublicKeySource(underlying)
+}
 
 var domainSet = wire.NewSet(domain.NewRelaysExtractor, wire.Bind(new(app.RelaysExtractor), new(*domain.RelaysExtractor)), domain.NewContactsExtractor, wire.Bind(new(app.ContactsExtractor), new(*domain.ContactsExtractor)))

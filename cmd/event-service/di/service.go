@@ -23,6 +23,7 @@ type Service struct {
 	eventSavedEventSubscriber  *sqlitepubsub.EventSavedEventSubscriber
 	metricsTimer               *timer.Metrics
 	transactionRunner          *sqlite.TransactionRunner
+	taskScheduler              *downloader.TaskScheduler
 	migrationsRunner           *migrations.Runner
 	migrations                 migrations.Migrations
 	migrationsProgressCallback migrations.ProgressCallback
@@ -36,6 +37,7 @@ func NewService(
 	eventSavedEventSubscriber *sqlitepubsub.EventSavedEventSubscriber,
 	metricsTimer *timer.Metrics,
 	transactionRunner *sqlite.TransactionRunner,
+	taskScheduler *downloader.TaskScheduler,
 	migrationsRunner *migrations.Runner,
 	migrations migrations.Migrations,
 	migrationsProgressCallback migrations.ProgressCallback,
@@ -49,6 +51,7 @@ func NewService(
 		metricsTimer:               metricsTimer,
 		transactionRunner:          transactionRunner,
 		migrationsRunner:           migrationsRunner,
+		taskScheduler:              taskScheduler,
 		migrations:                 migrations,
 		migrationsProgressCallback: migrationsProgressCallback,
 	}
@@ -97,6 +100,11 @@ func (s Service) Run(ctx context.Context) error {
 	runners++
 	go func() {
 		errCh <- errors.Wrap(s.transactionRunner.Run(ctx), "transaction runner error")
+	}()
+
+	runners++
+	go func() {
+		errCh <- errors.Wrap(s.taskScheduler.Run(ctx), "task scheduler error")
 	}()
 
 	var err error

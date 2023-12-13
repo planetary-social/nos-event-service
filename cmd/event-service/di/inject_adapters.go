@@ -6,6 +6,7 @@ import (
 	"github.com/boreq/errors"
 	"github.com/google/wire"
 	"github.com/planetary-social/nos-event-service/internal/logging"
+	"github.com/planetary-social/nos-event-service/service/adapters"
 	"github.com/planetary-social/nos-event-service/service/adapters/prometheus"
 	"github.com/planetary-social/nos-event-service/service/adapters/sqlite"
 	"github.com/planetary-social/nos-event-service/service/app"
@@ -64,6 +65,9 @@ var adaptersSet = wire.NewSet(
 	wire.Bind(new(app.Metrics), new(*prometheus.Prometheus)),
 	wire.Bind(new(relays.Metrics), new(*prometheus.Prometheus)),
 	wire.Bind(new(downloader.Metrics), new(*prometheus.Prometheus)),
+
+	adapters.NewCurrentTimeProvider,
+	wire.Bind(new(downloader.CurrentTimeProvider), new(*adapters.CurrentTimeProvider)),
 )
 
 func newAdaptersFactoryFn(deps buildTransactionSqliteAdaptersDependencies) sqlite.AdaptersFactoryFn {
