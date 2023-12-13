@@ -150,7 +150,8 @@ var downloaderSet = wire.NewSet(
 	wire.Bind(new(downloader.RelayConnections), new(*relays.RelayConnections)),
 
 	app.NewDatabasePublicKeySource,
-	wire.Bind(new(downloader.PublicKeySource), new(*app.DatabasePublicKeySource)),
+	newCachedPublicKeySource,
+	wire.Bind(new(downloader.PublicKeySource), new(*app.CachedDatabasePublicKeySource)),
 
 	relays.NewEventSender,
 	wire.Bind(new(app.EventSender), new(*relays.EventSender)),
@@ -158,6 +159,10 @@ var downloaderSet = wire.NewSet(
 	downloader.NewTaskScheduler,
 	wire.Bind(new(downloader.Scheduler), new(*downloader.TaskScheduler)),
 )
+
+func newCachedPublicKeySource(underlying *app.DatabasePublicKeySource) *app.CachedDatabasePublicKeySource {
+	return app.NewCachedDatabasePublicKeySource(underlying)
+}
 
 var domainSet = wire.NewSet(
 	domain.NewRelaysExtractor,
