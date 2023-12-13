@@ -27,6 +27,10 @@ func TestTaskScheduler_SchedulerWaitsForTasksToCompleteBeforeProducingMore(t *te
 
 	ts := newTestedTaskScheduler(ctx, t)
 	ts.CurrentTimeProvider.SetCurrentTime(start)
+	ts.PublicKeySource.SetPublicKeys(downloader.NewPublicKeys(
+		[]domain.PublicKey{fixtures.SomePublicKey()},
+		[]domain.PublicKey{fixtures.SomePublicKey()},
+	))
 
 	ch, err := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
 	require.NoError(t, err)
@@ -48,6 +52,38 @@ forloop:
 	require.Equal(t, numberOfTaskTypes, len(filters))
 }
 
+func TestTaskScheduler_SchedulerDoesNotProduceEmptyTasks(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(fixtures.TestContext(t), 5*time.Second)
+	defer cancel()
+
+	start := date(2023, time.December, 27, 10, 30, 00)
+
+	ts := newTestedTaskScheduler(ctx, t)
+	ts.CurrentTimeProvider.SetCurrentTime(start)
+	ts.PublicKeySource.SetPublicKeys(downloader.NewPublicKeys(nil, nil))
+
+	ch, err := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
+	require.NoError(t, err)
+
+	var filters []domain.Filter
+forloop:
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case v := <-ch:
+			filters = append(filters, v.Filter())
+		case <-time.After(1 * time.Second):
+			t.Log("no new tasks for a short while, assuming that scheduler is waiting for them to complete")
+			break forloop
+		}
+	}
+
+	require.Equal(t, 1, len(filters))
+}
+
 func TestTaskScheduler_SchedulerProducesTasksFromSequentialTimeWindowsLeadingUpToCurrentTime(t *testing.T) {
 	t.Parallel()
 
@@ -58,6 +94,10 @@ func TestTaskScheduler_SchedulerProducesTasksFromSequentialTimeWindowsLeadingUpT
 
 	ts := newTestedTaskScheduler(ctx, t)
 	ts.CurrentTimeProvider.SetCurrentTime(start)
+	ts.PublicKeySource.SetPublicKeys(downloader.NewPublicKeys(
+		[]domain.PublicKey{fixtures.SomePublicKey()},
+		[]domain.PublicKey{fixtures.SomePublicKey()},
+	))
 
 	ch, err := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
 	require.NoError(t, err)
@@ -112,6 +152,10 @@ func TestTaskScheduler_ThereIsOneWindowOfDelayToLetRelaysSyncData(t *testing.T) 
 
 	ts := newTestedTaskScheduler(ctx, t)
 	ts.CurrentTimeProvider.SetCurrentTime(start)
+	ts.PublicKeySource.SetPublicKeys(downloader.NewPublicKeys(
+		nil,
+		nil,
+	))
 
 	ch, err := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
 	require.NoError(t, err)
@@ -192,6 +236,7 @@ func TestTaskScheduler_TerminatesTasks(t *testing.T) {
 type testedTaskScheduler struct {
 	Scheduler           *downloader.TaskScheduler
 	CurrentTimeProvider *mocks.CurrentTimeProvider
+	PublicKeySource     *mockPublicKeySource
 }
 
 func newTestedTaskScheduler(ctx context.Context, tb testing.TB) *testedTaskScheduler {
@@ -205,6 +250,7 @@ func newTestedTaskScheduler(ctx context.Context, tb testing.TB) *testedTaskSched
 
 	return &testedTaskScheduler{
 		Scheduler:           scheduler,
+		PublicKeySource:     source,
 		CurrentTimeProvider: currentTimeProvider,
 	}
 }
@@ -217,6 +263,10 @@ func newMockPublicKeySource() *mockPublicKeySource {
 	return &mockPublicKeySource{
 		publicKeys: downloader.NewPublicKeys(nil, nil),
 	}
+}
+
+func (p *mockPublicKeySource) SetPublicKeys(publicKeys downloader.PublicKeys) {
+	p.publicKeys = publicKeys
 }
 
 func (p *mockPublicKeySource) GetPublicKeys(ctx context.Context) (downloader.PublicKeys, error) {
