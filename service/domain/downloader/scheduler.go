@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	sendOutTasksEvery = 10 * time.Millisecond
+	sendOutTasksEvery = 100 * time.Millisecond
 
 	initialWindowAge = 1 * time.Hour
 	windowSize       = 1 * time.Minute
