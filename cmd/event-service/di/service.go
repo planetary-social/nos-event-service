@@ -5,6 +5,7 @@ import (
 
 	"github.com/boreq/errors"
 	"github.com/hashicorp/go-multierror"
+	"github.com/planetary-social/nos-event-service/internal/logging"
 	"github.com/planetary-social/nos-event-service/internal/migrations"
 	"github.com/planetary-social/nos-event-service/service/adapters/sqlite"
 	"github.com/planetary-social/nos-event-service/service/app"
@@ -27,6 +28,7 @@ type Service struct {
 	migrationsRunner           *migrations.Runner
 	migrations                 migrations.Migrations
 	migrationsProgressCallback migrations.ProgressCallback
+	logger                     logging.Logger
 }
 
 func NewService(
@@ -41,6 +43,7 @@ func NewService(
 	migrationsRunner *migrations.Runner,
 	migrations migrations.Migrations,
 	migrationsProgressCallback migrations.ProgressCallback,
+	logger logging.Logger,
 ) Service {
 	return Service{
 		app:                        app,
@@ -54,6 +57,7 @@ func NewService(
 		taskScheduler:              taskScheduler,
 		migrations:                 migrations,
 		migrationsProgressCallback: migrationsProgressCallback,
+		logger:                     logger.New("service"),
 	}
 }
 
@@ -107,11 +111,12 @@ func (s Service) Run(ctx context.Context) error {
 		errCh <- errors.Wrap(s.taskScheduler.Run(ctx), "task scheduler error")
 	}()
 
-	var err error
+	var compoundErr error
 	for i := 0; i < runners; i++ {
-		err = multierror.Append(err, errors.Wrap(<-errCh, "error returned by runner"))
+		err := errors.Wrap(<-errCh, "error returned by runner")
+		s.logger.Error().WithError(err).Message("runner terminated")
+		compoundErr = multierror.Append(compoundErr, err)
 		cancel()
 	}
-
-	return err
+	return compoundErr
 }
