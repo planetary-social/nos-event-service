@@ -111,7 +111,7 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 		return Service{}, nil, err
 	}
 	loggingMigrationsProgressCallback := adapters.NewLoggingMigrationsProgressCallback(logger)
-	service := NewService(application, server, downloaderDownloader, receivedEventSubscriber, eventSavedEventSubscriber, metrics, transactionRunner, taskScheduler, runner, migrationsMigrations, loggingMigrationsProgressCallback)
+	service := NewService(application, server, downloaderDownloader, receivedEventSubscriber, eventSavedEventSubscriber, metrics, transactionRunner, taskScheduler, runner, migrationsMigrations, loggingMigrationsProgressCallback, logger)
 	return service, func() {
 		cleanup()
 	}, nil
