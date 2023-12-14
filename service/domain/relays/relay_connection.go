@@ -201,7 +201,7 @@ func (r *RelayConnection) scheduleSendingEvent(ctx context.Context, event domain
 func (r *RelayConnection) logRunErr(err error) {
 	l := r.logger.Error()
 	if r.errorIsCommonAndShouldNotBeLoggedOnErrorLevel(err) {
-		l = r.logger.Debug()
+		l = r.logger.Trace()
 	}
 	l.WithError(err).Message("encountered an error")
 }
@@ -287,9 +287,7 @@ func (r *RelayConnection) run(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		if err := conn.Close(); err != nil {
-			r.logger.Debug().WithError(err).Message("error when closing connection due to closed context")
-		}
+		_ = conn.Close()
 	}()
 
 	go func() {
