@@ -665,29 +665,36 @@ func (d *DefaultBackoffManager) isDialError(err error) bool {
 type WebsocketConnection struct {
 	conn      *websocket.Conn
 	writeLock sync.Mutex
+	logger    logging.Logger
 }
 
-func NewWebsocketConnection(ctx context.Context, address domain.RelayAddress) (*WebsocketConnection, error) {
+func NewWebsocketConnection(ctx context.Context, address domain.RelayAddress, logger logging.Logger) (*WebsocketConnection, error) {
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, address.String(), nil)
 	if err != nil {
 		return nil, NewDialError(err)
 	}
 
 	return &WebsocketConnection{
-		conn: conn,
+		conn:   conn,
+		logger: logger.New(fmt.Sprintf("websocketConnection(%s)", address.String())),
 	}, nil
 }
 
 func (c *WebsocketConnection) SendMessage(msg NostrMessage) error {
-	msgJSON, err := msg.MarshalJSON()
+	messageBytes, err := msg.MarshalJSON()
 	if err != nil {
 		return errors.Wrap(err, "error marshaling message")
 	}
 
+	c.logger.
+		Trace().
+		WithField("message", string(messageBytes)).
+		Message("sending a message")
+
 	c.writeLock.Lock()
 	defer c.writeLock.Unlock()
 
-	if err := c.conn.WriteMessage(websocket.TextMessage, msgJSON); err != nil {
+	if err := c.conn.WriteMessage(websocket.TextMessage, messageBytes); err != nil {
 		return errors.Wrap(err, "error writing message")
 	}
 
@@ -700,6 +707,11 @@ func (c *WebsocketConnection) ReadMessage() ([]byte, error) {
 		return nil, NewReadMessageError(err)
 	}
 
+	c.logger.
+		Trace().
+		WithField("message", string(messageBytes)).
+		Message("received a message")
+
 	return messageBytes, nil
 }
 
@@ -709,14 +721,21 @@ func (c *WebsocketConnection) Close() error {
 
 type WebsocketConnectionFactory struct {
 	address domain.RelayAddress
+	logger  logging.Logger
 }
 
-func NewWebsocketConnectionFactory(address domain.RelayAddress) *WebsocketConnectionFactory {
-	return &WebsocketConnectionFactory{address: address}
+func NewWebsocketConnectionFactory(
+	address domain.RelayAddress,
+	logger logging.Logger,
+) *WebsocketConnectionFactory {
+	return &WebsocketConnectionFactory{
+		address: address,
+		logger:  logger,
+	}
 }
 
 func (w *WebsocketConnectionFactory) Create(ctx context.Context) (Connection, error) {
-	return NewWebsocketConnection(ctx, w.address)
+	return NewWebsocketConnection(ctx, w.address, w.logger)
 }
 
 func (w *WebsocketConnectionFactory) Address() domain.RelayAddress {
