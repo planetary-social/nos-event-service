@@ -29,34 +29,12 @@ type TimeWindowTaskTracker struct {
 	lock   sync.Mutex
 }
 
-func NewTimeWindowTaskTracker(
-	ctx context.Context,
-	window TimeWindow,
-) (*TimeWindowTaskTracker, error) {
-	ctx, cancel := context.WithCancel(ctx)
+func NewTimeWindowTaskTracker(window TimeWindow) (*TimeWindowTaskTracker, error) {
 	t := &TimeWindowTaskTracker{
-		ctx:    ctx,
-		cancel: cancel,
 		state:  TimeWindowTaskStateNew,
 		window: window,
 	}
 	return t, nil
-}
-
-func (t *TimeWindowTaskTracker) MarkAsDone() {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	t.state = TimeWindowTaskStateDone
-}
-
-func (t *TimeWindowTaskTracker) MarkAsFailed() {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	if t.state != TimeWindowTaskStateDone {
-		t.state = TimeWindowTaskStateError
-	}
 }
 
 func (t *TimeWindowTaskTracker) CheckIfDoneAndEnd() bool {
@@ -95,35 +73,68 @@ func (t *TimeWindowTaskTracker) MaybeStart(ctx context.Context, kinds []domain.E
 		return nil, false, errors.Wrap(err, "error creating a filter")
 	}
 
-	t.cancel()
+	if t.cancel != nil {
+		t.cancel()
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
+
 	t.ctx = ctx
 	t.cancel = cancel
 	t.state = TimeWindowTaskStateStarted
 
-	task := NewTimeWindowTask(filter, t)
+	task := NewTimeWindowTask(ctx, filter, t)
 	return task, true, nil
 }
 
+func (t *TimeWindowTaskTracker) markAsDone() {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	if t.state == TimeWindowTaskStateStarted {
+		t.state = TimeWindowTaskStateDone
+	}
+}
+
+func (t *TimeWindowTaskTracker) markAsFailed() {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	if t.state != TimeWindowTaskStateDone {
+		t.state = TimeWindowTaskStateError
+	}
+}
+
 func (t *TimeWindowTaskTracker) isDead() bool {
+	return t.ctxIsDead() || t.state == TimeWindowTaskStateError || t.state == TimeWindowTaskStateNew
+}
+
+func (t *TimeWindowTaskTracker) ctxIsDead() bool {
+	if t.ctx == nil {
+		return true
+	}
 	if err := t.ctx.Err(); err != nil {
 		return true
 	}
-	return t.state == TimeWindowTaskStateError || t.state == TimeWindowTaskStateNew
+	return false
 }
 
 type TimeWindowTask struct {
-	filter domain.Filter
-	t      *TimeWindowTaskTracker
+	ctx     context.Context
+	filter  domain.Filter
+	tracker tracker
 }
 
-func NewTimeWindowTask(filter domain.Filter, t *TimeWindowTaskTracker) *TimeWindowTask {
-	return &TimeWindowTask{filter: filter, t: t}
+func NewTimeWindowTask(ctx context.Context, filter domain.Filter, tracker tracker) *TimeWindowTask {
+	return &TimeWindowTask{
+		ctx:     ctx,
+		filter:  filter,
+		tracker: tracker,
+	}
 }
 
 func (t *TimeWindowTask) Ctx() context.Context {
-	return t.t.ctx
+	return t.ctx
 }
 
 func (t *TimeWindowTask) Filter() domain.Filter {
@@ -131,9 +142,18 @@ func (t *TimeWindowTask) Filter() domain.Filter {
 }
 
 func (t *TimeWindowTask) OnReceivedEOSE() {
-	t.t.MarkAsDone()
+	if t.ctx.Err() == nil {
+		t.tracker.markAsDone()
+	}
 }
 
 func (t *TimeWindowTask) OnError(err error) {
-	t.t.MarkAsFailed()
+	if t.ctx.Err() == nil {
+		t.tracker.markAsFailed()
+	}
+}
+
+type tracker interface {
+	markAsDone()
+	markAsFailed()
 }

@@ -359,7 +359,7 @@ func (t *TimeWindowTaskGenerator) maybeGenerateNewTracker(ctx context.Context) (
 		return nil, false, nil
 	}
 	t.lastWindow = nextWindow
-	v, err := NewTimeWindowTaskTracker(ctx, nextWindow)
+	v, err := NewTimeWindowTaskTracker(nextWindow)
 	if err != nil {
 		return nil, false, errors.Wrap(err, "error creating a task")
 	}
