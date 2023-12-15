@@ -158,9 +158,10 @@ func TestTaskScheduler_ThereIsOneWindowOfDelayToLetRelaysSyncData(t *testing.T) 
 			return a.Start().Compare(b.Start())
 		})
 
-		assert.Len(t, windows, 59)
-		lastWindow := windows[len(windows)-1]
-		assert.Equal(t, date(2023, time.December, 27, 10, 29, 00), lastWindow.End().UTC())
+		if assert.Len(t, windows, 59) {
+			lastWindow := windows[len(windows)-1]
+			assert.Equal(t, date(2023, time.December, 27, 10, 29, 00), lastWindow.End().UTC())
+		}
 	}, waitFor, tick)
 }
 
