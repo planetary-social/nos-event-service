@@ -10,6 +10,7 @@ import (
 )
 
 var (
+	TimeWindowTaskStateNew     = TimeWindowTaskState{"new"}
 	TimeWindowTaskStateStarted = TimeWindowTaskState{"started"}
 	TimeWindowTaskStateDone    = TimeWindowTaskState{"done"}
 	TimeWindowTaskStateError   = TimeWindowTaskState{"error"}
@@ -19,8 +20,7 @@ type TimeWindowTaskState struct {
 	s string
 }
 
-type TimeWindowTask struct {
-	filter domain.Filter
+type TimeWindowTaskTracker struct {
 	window TimeWindow
 
 	ctx    context.Context
@@ -29,43 +29,28 @@ type TimeWindowTask struct {
 	lock   sync.Mutex
 }
 
-func NewTimeWindowTask(
+func NewTimeWindowTaskTracker(
 	ctx context.Context,
-	kinds []domain.EventKind,
-	tags []domain.FilterTag,
-	authors []domain.PublicKey,
 	window TimeWindow,
-) (*TimeWindowTask, error) {
+) (*TimeWindowTaskTracker, error) {
 	ctx, cancel := context.WithCancel(ctx)
-
-	t := &TimeWindowTask{
+	t := &TimeWindowTaskTracker{
 		ctx:    ctx,
 		cancel: cancel,
-		state:  TimeWindowTaskStateStarted,
+		state:  TimeWindowTaskStateNew,
 		window: window,
-	}
-	if err := t.updateFilter(kinds, tags, authors); err != nil {
-		return nil, errors.New("error updating the filter")
 	}
 	return t, nil
 }
 
-func (t *TimeWindowTask) Ctx() context.Context {
-	return t.ctx
-}
-
-func (t *TimeWindowTask) Filter() domain.Filter {
-	return t.filter
-}
-
-func (t *TimeWindowTask) OnReceivedEOSE() {
+func (t *TimeWindowTaskTracker) MarkAsDone() {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	t.state = TimeWindowTaskStateDone
 }
 
-func (t *TimeWindowTask) OnError(err error) {
+func (t *TimeWindowTaskTracker) MarkAsFailed() {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -74,7 +59,7 @@ func (t *TimeWindowTask) OnError(err error) {
 	}
 }
 
-func (t *TimeWindowTask) CheckIfDoneAndEnd() bool {
+func (t *TimeWindowTaskTracker) CheckIfDoneAndEnd() bool {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -86,33 +71,18 @@ func (t *TimeWindowTask) CheckIfDoneAndEnd() bool {
 	return true
 }
 
-func (t *TimeWindowTask) MaybeReset(ctx context.Context, kinds []domain.EventKind, tags []domain.FilterTag, authors []domain.PublicKey) (bool, error) {
+func (t *TimeWindowTaskTracker) MaybeStart(ctx context.Context, kinds []domain.EventKind, authors []domain.PublicKey, tags []domain.FilterTag) (Task, bool, error) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	if t.state == TimeWindowTaskStateDone {
-		return false, errors.New("why are we trying to reset a completed task?")
+		return nil, false, errors.New("why are we trying to reset a completed task?")
 	}
 
 	if !t.isDead() {
-		return false, nil
+		return nil, false, nil
 	}
 
-	t.cancel()
-
-	ctx, cancel := context.WithCancel(ctx)
-	t.ctx = ctx
-	t.cancel = cancel
-	t.state = TimeWindowTaskStateStarted
-
-	if err := t.updateFilter(kinds, tags, authors); err != nil {
-		return false, errors.New("error updating the filter")
-	}
-
-	return true, nil
-}
-
-func (t *TimeWindowTask) updateFilter(kinds []domain.EventKind, tags []domain.FilterTag, authors []domain.PublicKey) error {
 	filter, err := domain.NewFilter(
 		nil,
 		kinds,
@@ -122,17 +92,48 @@ func (t *TimeWindowTask) updateFilter(kinds []domain.EventKind, tags []domain.Fi
 		internal.Pointer(t.window.End()),
 	)
 	if err != nil {
-		return errors.Wrap(err, "error creating a filter")
+		return nil, false, errors.Wrap(err, "error creating a filter")
 	}
 
-	t.filter = filter
+	t.cancel()
 
-	return nil
+	ctx, cancel := context.WithCancel(ctx)
+	t.ctx = ctx
+	t.cancel = cancel
+	t.state = TimeWindowTaskStateStarted
+
+	task := NewTimeWindowTask(filter, t)
+	return task, true, nil
 }
 
-func (t *TimeWindowTask) isDead() bool {
+func (t *TimeWindowTaskTracker) isDead() bool {
 	if err := t.ctx.Err(); err != nil {
 		return true
 	}
-	return t.state == TimeWindowTaskStateError
+	return t.state == TimeWindowTaskStateError || t.state == TimeWindowTaskStateNew
+}
+
+type TimeWindowTask struct {
+	filter domain.Filter
+	t      *TimeWindowTaskTracker
+}
+
+func NewTimeWindowTask(filter domain.Filter, t *TimeWindowTaskTracker) *TimeWindowTask {
+	return &TimeWindowTask{filter: filter, t: t}
+}
+
+func (t *TimeWindowTask) Ctx() context.Context {
+	return t.t.ctx
+}
+
+func (t *TimeWindowTask) Filter() domain.Filter {
+	return t.filter
+}
+
+func (t *TimeWindowTask) OnReceivedEOSE() {
+	t.t.MarkAsDone()
+}
+
+func (t *TimeWindowTask) OnError(err error) {
+	t.t.MarkAsFailed()
 }
