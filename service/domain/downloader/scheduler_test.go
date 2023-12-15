@@ -234,7 +234,8 @@ func newTestedTaskScheduler(ctx context.Context, tb testing.TB) *testedTaskSched
 }
 
 type mockPublicKeySource struct {
-	publicKeys downloader.PublicKeys
+	publicKeys     downloader.PublicKeys
+	publicKeysLock sync.Mutex
 }
 
 func newMockPublicKeySource() *mockPublicKeySource {
@@ -244,10 +245,16 @@ func newMockPublicKeySource() *mockPublicKeySource {
 }
 
 func (p *mockPublicKeySource) SetPublicKeys(publicKeys downloader.PublicKeys) {
+	p.publicKeysLock.Lock()
+	defer p.publicKeysLock.Unlock()
+
 	p.publicKeys = publicKeys
 }
 
 func (p *mockPublicKeySource) GetPublicKeys(ctx context.Context) (downloader.PublicKeys, error) {
+	p.publicKeysLock.Lock()
+	defer p.publicKeysLock.Unlock()
+
 	return p.publicKeys, nil
 }
 
