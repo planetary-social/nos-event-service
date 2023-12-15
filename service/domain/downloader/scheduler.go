@@ -71,9 +71,9 @@ func (t *TaskScheduler) GetTasks(ctx context.Context, relay domain.RelayAddress)
 
 func (t *TaskScheduler) Run(ctx context.Context) error {
 	for {
-		hadTasks, err := t.sendOutTasks()
+		hadTasks, err := t.sendOutTasks(ctx)
 		if err != nil {
-			return errors.Wrap(err, "error sending out tasks")
+			t.logger.Error().WithError(err).Message("error sending out tasks")
 		}
 
 		if hadTasks {
@@ -94,13 +94,18 @@ func (t *TaskScheduler) Run(ctx context.Context) error {
 	}
 }
 
-func (t *TaskScheduler) sendOutTasks() (bool, error) {
+func (t *TaskScheduler) sendOutTasks(ctx context.Context) (bool, error) {
+	publicKeys, err := t.getPublicKeysToReplicate(ctx)
+	if err != nil {
+		return false, errors.Wrap(err, "error getting public keys to replicate")
+	}
+
 	t.taskGeneratorsLock.Lock()
 	defer t.taskGeneratorsLock.Unlock()
 
 	atLeastOneHadTasks := false
 	for _, taskGenerator := range t.taskGenerators {
-		hadTasks, err := taskGenerator.SendOutTasks()
+		hadTasks, err := taskGenerator.SendOutTasks(publicKeys)
 		if err != nil {
 			return false, errors.Wrap(err, "error calling task generator")
 		}
@@ -121,12 +126,21 @@ func (t *TaskScheduler) getOrCreateGeneratorWithLock(address domain.RelayAddress
 		return v, nil
 	}
 
-	v, err := NewRelayTaskGenerator(t.publicKeySource, t.currentTimeProvider, t.logger)
+	v, err := NewRelayTaskGenerator(t.currentTimeProvider, t.logger)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating a task generator")
 	}
 	t.taskGenerators[address] = v
 	return v, nil
+}
+
+func (t *TaskScheduler) getPublicKeysToReplicate(ctx context.Context) (*PublicKeysToReplicate, error) {
+	publicKeys, err := t.publicKeySource.GetPublicKeys(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "error getting public keys")
+	}
+
+	return NewPublicKeysToReplicate(publicKeys.All(), publicKeys.PublicKeysToMonitor()), nil
 }
 
 type taskSubscription struct {
@@ -150,12 +164,10 @@ type RelayTaskGenerator struct {
 	authorTask *TimeWindowTaskGenerator
 	tagTask    *TimeWindowTaskGenerator
 
-	publicKeySource PublicKeySource
-	logger          logging.Logger
+	logger logging.Logger
 }
 
 func NewRelayTaskGenerator(
-	publicKeySource PublicKeySource,
 	currentTimeProvider CurrentTimeProvider,
 	logger logging.Logger,
 ) (*RelayTaskGenerator, error) {
@@ -191,11 +203,10 @@ func NewRelayTaskGenerator(
 	}
 
 	return &RelayTaskGenerator{
-		publicKeySource: publicKeySource,
-		globalTask:      globalTask,
-		authorTask:      authorTask,
-		tagTask:         tagTask,
-		logger:          logger.New("relayTaskGenerator"),
+		globalTask: globalTask,
+		authorTask: authorTask,
+		tagTask:    tagTask,
+		logger:     logger.New("relayTaskGenerator"),
 	}, nil
 }
 
@@ -207,9 +218,13 @@ func (t *RelayTaskGenerator) AddSubscription(ctx context.Context, ch chan Task) 
 	t.taskSubscriptions = append(t.taskSubscriptions, taskSubscription)
 }
 
-func (t *RelayTaskGenerator) SendOutTasks() (bool, error) {
+func (t *RelayTaskGenerator) SendOutTasks(publicKeys *PublicKeysToReplicate) (bool, error) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
+
+	if err := t.updateFilters(publicKeys); err != nil {
+		return false, errors.Wrap(err, "error updating filters")
+	}
 
 	slices.DeleteFunc(t.taskSubscriptions, func(subscription *taskSubscription) bool {
 		select {
@@ -252,10 +267,6 @@ func (t *RelayTaskGenerator) pushTasks(ctx context.Context, ch chan<- Task) (int
 }
 
 func (t *RelayTaskGenerator) getTasksToPush(ctx context.Context) ([]Task, error) {
-	if err := t.updateFilters(ctx); err != nil {
-		return nil, errors.Wrap(err, "error updating filters")
-	}
-
 	var result []Task
 	for _, generator := range t.generators() {
 		tasks, err := generator.Generate(ctx)
@@ -281,14 +292,9 @@ func (t *RelayTaskGenerator) generators() []*TimeWindowTaskGenerator {
 	return generators
 }
 
-func (t *RelayTaskGenerator) updateFilters(ctx context.Context) error {
-	publicKeys, err := t.publicKeySource.GetPublicKeys(ctx)
-	if err != nil {
-		return errors.Wrap(err, "error getting public keys")
-	}
-
+func (t *RelayTaskGenerator) updateFilters(publicKeys *PublicKeysToReplicate) error {
 	var pTags []domain.FilterTag
-	for _, publicKey := range publicKeys.PublicKeysToMonitor() {
+	for _, publicKey := range publicKeys.Tagged() {
 		tag, err := domain.NewFilterTag(domain.TagProfile, publicKey.Hex())
 		if err != nil {
 			return errors.Wrap(err, "error creating a filter tag")
@@ -296,7 +302,7 @@ func (t *RelayTaskGenerator) updateFilters(ctx context.Context) error {
 		pTags = append(pTags, tag)
 	}
 
-	t.authorTask.UpdateAuthors(publicKeys.All())
+	t.authorTask.UpdateAuthors(publicKeys.Authors())
 	t.tagTask.UpdateTags(pTags)
 	return nil
 }
@@ -397,4 +403,21 @@ func (t *TimeWindowTaskGenerator) maybeGenerateNewTask(ctx context.Context) (*Ti
 		return nil, false, errors.Wrap(err, "error creating a task")
 	}
 	return v, true, nil
+}
+
+type PublicKeysToReplicate struct {
+	authors []domain.PublicKey
+	tagged  []domain.PublicKey
+}
+
+func NewPublicKeysToReplicate(authors []domain.PublicKey, tagged []domain.PublicKey) *PublicKeysToReplicate {
+	return &PublicKeysToReplicate{authors: authors, tagged: tagged}
+}
+
+func (p PublicKeysToReplicate) Authors() []domain.PublicKey {
+	return p.authors
+}
+
+func (p PublicKeysToReplicate) Tagged() []domain.PublicKey {
+	return p.tagged
 }
