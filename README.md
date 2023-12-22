@@ -19,6 +19,19 @@ a set of  bootstrap relays returned by
 The contacts are discovered by using the code located in
 [`ContactsExtractor`][contacts-extractor-search] to scan nostr events.
 
+### Internal sqlite pub sub
+
+In order to process events asynchroniously (which can take a while as we push them to our relay) there is an internal pubsub in place between `SaveReceivedEventHandler` and `ProcessSavedEventHandler`. We use a custom publisher and subscriber instead of the ones provided by Watermill so that we can process messages out of order. This helps if one of them gets stuck. The metrics for this pubsub are reported and can be seen in Grafana.
+
+```mermaid
+flowchart TB
+    save-received-event-handler["SaveReceivedEventHandler"]
+    process-saved-event-handler["ProcessSavedEventHandler"]
+    event-saved-event-subscriber["EventSavedEventSubscriber"]
+
+    save-received-event-handler --> |pubsub event| event-saved-event-subscriber
+    event-saved-event-subscriber --> |command| process-saved-event-handler
+```
 
 ## Building and running
 
