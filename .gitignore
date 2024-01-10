@@ -9,3 +9,4 @@ database.sqlite
 database.sqlite-journal
 run.sh
 _testdata
+.direnv
