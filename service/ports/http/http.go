@@ -184,7 +184,6 @@ func newGetEventResponse(event domain.Event) getEventResponse {
 	return getEventResponse{Event: event.Raw()}
 }
 
-
 func (s *Server) servePublicKey(r *http.Request) rest.RestResponse {
 	vars := mux.Vars(r)
 	hexPublicKeyString := vars["hex"]
