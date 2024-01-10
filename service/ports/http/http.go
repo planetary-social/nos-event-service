@@ -65,6 +65,7 @@ func (s *Server) createMux() http.Handler {
 	r.HandleFunc("/events", rest.Wrap(s.serveEvents))
 	r.HandleFunc("/events/{id}", rest.Wrap(s.serveEvent))
 	r.HandleFunc("/public-keys/{hex}", rest.Wrap(s.servePublicKey))
+	r.HandleFunc("/_health", rest.Wrap(s.serveHealthCheck))
 	r.HandleFunc("/", s.serveWs)
 	return r
 }
@@ -183,6 +184,7 @@ func newGetEventResponse(event domain.Event) getEventResponse {
 	return getEventResponse{Event: event.Raw()}
 }
 
+
 func (s *Server) servePublicKey(r *http.Request) rest.RestResponse {
 	vars := mux.Vars(r)
 	hexPublicKeyString := vars["hex"]
@@ -211,6 +213,12 @@ func newGetPublicKeyResponse(info app.PublicKeyInfo) *getPublicKeyResponse {
 		Followers: info.NumberOfFollowers(),
 		Followees: info.NumberOfFollowees(),
 	}
+}
+
+// The beginning of a health endpoint.  Literally just shows that the server
+// is running and handling requests.  Our metrics give more detailed health info.
+func (s *Server) serveHealthCheck( r *http.Request ) rest.RestResponse {
+	return rest.NewResponse("ok")
 }
 
 func (s *Server) handleConnection(ctx context.Context, conn *websocket.Conn) error {
