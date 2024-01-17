@@ -129,6 +129,10 @@ func NewDownloader(
 	}
 }
 
+// Will fetch pubkeys from the database and a list of hardcoded kinds from each relay found in out database.
+// These will be used to create tasks that specify nostr filters and contain a time window to control the since and until filter keys.
+// Theses filters are used to start queries for each relay. Events found this
+// way will be published to all subscribers of the downloader publisher.
 func (d *Downloader) Run(ctx context.Context) error {
 	go d.storeMetricsLoop(ctx)
 
@@ -167,6 +171,7 @@ func (d *Downloader) storeMetrics() {
 	d.metrics.ReportNumberOfRelayDownloaders(len(d.relayDownloaders))
 }
 
+// For each relay from getRelays() start a downloader and kill those that are not part of the list.
 func (d *Downloader) updateDownloaders(ctx context.Context) error {
 	relays, err := d.getRelays(ctx)
 	if err != nil {
@@ -216,6 +221,7 @@ func (d *Downloader) updateDownloaders(ctx context.Context) error {
 	return nil
 }
 
+// Get the bootstrap relays and those already in the database.
 func (d *Downloader) getRelays(ctx context.Context) (*internal.Set[domain.RelayAddress], error) {
 	result := internal.NewEmptySet[domain.RelayAddress]()
 
@@ -268,6 +274,7 @@ func NewRelayDownloader(
 	return v
 }
 
+// Will fetch tasks for the current relay and use them to query it and then publish the event to a pubsub.
 func (d *RelayDownloader) Start(ctx context.Context) error {
 	ch, err := d.scheduler.GetTasks(ctx, d.address)
 	if err != nil {
@@ -276,6 +283,7 @@ func (d *RelayDownloader) Start(ctx context.Context) error {
 
 	go func() {
 		for task := range ch {
+			// Uses the filter of the task to fetch events from the relay for the task time window.
 			go d.performTask(task)
 		}
 	}()
@@ -290,6 +298,7 @@ func (d *RelayDownloader) performTask(task Task) {
 	}
 }
 
+// Run the filter specified by the task and for each event found publish it to all subscribers.
 func (d *RelayDownloader) performTaskWithErr(task Task) error {
 	ch, err := d.relayConnections.GetEvents(task.Ctx(), d.address, task.Filter())
 	if err != nil {

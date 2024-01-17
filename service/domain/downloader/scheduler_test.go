@@ -42,7 +42,8 @@ func TestTaskScheduler_SchedulerWaitsForTasksToCompleteBeforeProducingMore(t *te
 	ch, err := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
 	require.NoError(t, err)
 
-	tasks := collectAllTasks(ctx, ch, false)
+	completeTasks := false
+	tasks := collectAllTasks(ctx, ch, completeTasks)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		require.Equal(t, numberOfTaskTypes, len(tasks.Tasks()))
@@ -67,9 +68,12 @@ func TestTaskScheduler_SchedulerDoesNotProduceEmptyTasks(t *testing.T) {
 	ch, err := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
 	require.NoError(t, err)
 
-	tasks := collectAllTasks(ctx, ch, false)
+	completeTasks := false
+	tasks := collectAllTasks(ctx, ch, completeTasks)
 
 	<-time.After(5 * time.Second)
+
+	// No public keys so no task for authors or ptags, but still one for event kinds
 	require.Len(t, tasks.Tasks(), 1)
 }
 
@@ -91,7 +95,8 @@ func TestTaskScheduler_SchedulerProducesTasksFromSequentialTimeWindowsLeadingUpT
 	ch, err := ts.Scheduler.GetTasks(ctx, fixtures.SomeRelayAddress())
 	require.NoError(t, err)
 
-	tasks := collectAllTasks(ctx, ch, true)
+	completeTasks := true
+	tasks := collectAllTasks(ctx, ch, completeTasks)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		filters := make(map[downloader.TimeWindow][]domain.Filter)
@@ -99,6 +104,7 @@ func TestTaskScheduler_SchedulerProducesTasksFromSequentialTimeWindowsLeadingUpT
 			start := task.Filter().Since()
 			duration := task.Filter().Until().Sub(*start)
 			window := downloader.MustNewTimeWindow(*start, duration)
+			// there will be 3 tasks per window, one for kind filter, one for authors filter and one for tags filter
 			filters[window] = append(filters[window], task.Filter())
 		}
 

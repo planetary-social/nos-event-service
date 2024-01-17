@@ -12,7 +12,10 @@ var (
 	EventKindEncryptedDirectMessage = MustNewEventKind(4)
 	EventKindReaction               = MustNewEventKind(7)
 	EventKindRelayListMetadata      = MustNewEventKind(10002)
-	EventKindRegistration           = MustNewEventKind(6666)
+	// TODO: This should be changed to 30078
+	// See https://github.com/nostr-protocol/nips/blob/master/78.md , 6666 is
+	// reserved by nip 90
+	EventKindRegistration = MustNewEventKind(6666)
 )
 
 type EventKind struct {
