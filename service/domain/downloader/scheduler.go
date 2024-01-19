@@ -36,6 +36,7 @@ type Scheduler interface {
 	GetTasks(ctx context.Context, relay domain.RelayAddress) (<-chan Task, error)
 }
 
+// A TaskScheduler is responsible for generating tasks for all relays by maintaing a list of TaskGenerators.
 type TaskScheduler struct {
 	taskGeneratorsLock sync.Mutex
 	taskGenerators     map[domain.RelayAddress]*RelayTaskGenerator
@@ -65,6 +66,7 @@ func (t *TaskScheduler) GetTasks(ctx context.Context, relay domain.RelayAddress)
 	}
 
 	ch := make(chan Task)
+	// The subscription for the relay will generate a sequence of tasks mapped to time windows
 	generator.AddSubscription(ctx, ch)
 	return ch, nil
 }
@@ -155,6 +157,16 @@ func newTaskSubscription(ctx context.Context, ch chan Task) *taskSubscription {
 	}
 }
 
+// A RelayTaskGenerator is responsible for generating tasks for a single relay.
+// Each task provides the time window for each query (since and until) and keeps
+// track of how many available running queries we can perform on the relay, we only
+// allow 3 running queries at a time; for global, author and tag queries across all
+// subscription channels.
+
+// RelayTaskGenerator maintains 3 TimeWindowTaskGenerator, one for each query
+// type. Each TimeWindowTaskGenerator maintains a list of TimeWindowTaskTracker,
+// one for each time window. Each TimeWindowTaskTracker maintains a list of
+// runningRelayDownloader, one for each concurrency setting. Each TimeWindowTaskTracker uses a TimeWindow
 type RelayTaskGenerator struct {
 	lock sync.Mutex
 
@@ -213,6 +225,7 @@ func (t *RelayTaskGenerator) SendOutTasks(publicKeys *PublicKeysToReplicate) (bo
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
+	// Create tags for the public keys.
 	var pTags []domain.FilterTag
 	for _, publicKey := range publicKeys.Tagged() {
 		tag, err := domain.NewFilterTag(domain.TagProfile, publicKey.Hex())
@@ -222,6 +235,7 @@ func (t *RelayTaskGenerator) SendOutTasks(publicKeys *PublicKeysToReplicate) (bo
 		pTags = append(pTags, tag)
 	}
 
+	// Delete each done subscription.
 	slices.DeleteFunc(t.taskSubscriptions, func(subscription *taskSubscription) bool {
 		select {
 		case <-subscription.ctx.Done():
@@ -233,6 +247,7 @@ func (t *RelayTaskGenerator) SendOutTasks(publicKeys *PublicKeysToReplicate) (bo
 
 	sentTasksForAtLeastOneSubscription := false
 	for _, taskSubscription := range t.taskSubscriptions {
+		// Send a task for each subscription
 		numberOfSentTasks, err := t.pushTasks(taskSubscription.ctx, taskSubscription.ch, publicKeys.Authors(), pTags)
 		if err != nil {
 			return false, errors.Wrap(err, "error sending out generators")
@@ -245,6 +260,7 @@ func (t *RelayTaskGenerator) SendOutTasks(publicKeys *PublicKeysToReplicate) (bo
 	return sentTasksForAtLeastOneSubscription, nil
 }
 
+// Pushes tasks to the task channel. If tasks are not done nothing is pushed.
 func (t *RelayTaskGenerator) pushTasks(ctx context.Context, ch chan<- Task, authors []domain.PublicKey, tags []domain.FilterTag) (int, error) {
 	tasks, err := t.getTasksToPush(ctx, authors, tags)
 	if err != nil {
@@ -317,12 +333,17 @@ func NewTimeWindowTaskGenerator(
 	}, nil
 }
 
+// A task generator creates a task tracker per concurrency setting. The tracker
+// will be used to return the corresponding task, if the task is still runnning
+// it will return no task. If the task is done it will discard the current
+// tracker, create a new one and return a new task.
+// Each task generated will be pushed to all subscribers of the scheduler
 func (t *TimeWindowTaskGenerator) Generate(ctx context.Context, kinds []domain.EventKind, authors []domain.PublicKey, tags []domain.FilterTag) ([]Task, error) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	t.taskTrackers = slices.DeleteFunc(t.taskTrackers, func(task *TimeWindowTaskTracker) bool {
-		return task.CheckIfDoneAndEnd()
+	t.taskTrackers = slices.DeleteFunc(t.taskTrackers, func(tracker *TimeWindowTaskTracker) bool {
+		return tracker.CheckIfDoneAndEnd()
 	})
 
 	for i := len(t.taskTrackers); i < timeWindowTaskConcurrency; i++ {

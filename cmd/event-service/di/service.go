@@ -77,35 +77,50 @@ func (s Service) Run(ctx context.Context) error {
 	runners := 0
 
 	runners++
+	// Serve http
 	go func() {
 		errCh <- errors.Wrap(s.server.ListenAndServe(ctx), "server error")
 	}()
 
+	// Fetch events from the database relays and send them to the in memory pubsub
 	runners++
 	go func() {
 		errCh <- errors.Wrap(s.downloader.Run(ctx), "downloader error")
 	}()
 
+	// Subscribe to the in memory pubsub of events, emit a NewSaveReceivedEvent
+	// command that will make some checks on the event, save it if the check
+	// passes and emit a EventSavedEvent to the sqlite pubsub.
 	runners++
 	go func() {
 		errCh <- errors.Wrap(s.receivedEventSubscriber.Run(ctx), "received event subscriber error")
 	}()
 
+	// Subscribe to saved events in the database. This uses the sqlite pubsub. This triggers:
+	// - analysis to extract new relays and store them in db. They will be used by the downloader.
+	// - analysis to store pubkeys and store them in the db (contacts_followees, pubkeys, contacts_events). This will be used by the downloader.
+	// - publish to watermill pubsub
+	// - may publish the event in wss://relay.nos.social if they are metadata related
 	runners++
 	go func() {
 		errCh <- errors.Wrap(s.eventSavedEventSubscriber.Run(ctx), "event saved subscriber error")
 	}()
 
+	// The metrics timer collects metrics from the app.
 	runners++
 	go func() {
 		errCh <- errors.Wrap(s.metricsTimer.Run(ctx), "metrics timer error")
 	}()
 
+	// Sqlite transaction runner
 	runners++
 	go func() {
 		errCh <- errors.Wrap(s.transactionRunner.Run(ctx), "transaction runner error")
 	}()
 
+	// The task scheduler creates sequential time window based tasks that
+	// contain filters to be applied to each relay to fetch the events we want.
+	// Event downloaders subscribe to this.
 	runners++
 	go func() {
 		errCh <- errors.Wrap(s.taskScheduler.Run(ctx), "task scheduler error")

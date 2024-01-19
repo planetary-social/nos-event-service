@@ -81,6 +81,7 @@ func (h *ProcessSavedEventHandler) Handle(ctx context.Context, cmd ProcessSavedE
 		return errors.Wrap(err, "error saving relays and contacts")
 	}
 
+	// Published to nostr-events google pubsub
 	if err := h.externalEventPublisher.PublishNewEventReceived(ctx, event); err != nil {
 		return errors.Wrap(err, "error publishing the external event")
 	}
@@ -200,6 +201,7 @@ func ShouldSendEventToRelay(event Event) bool {
 		return false
 	}
 
+	// Check if the event is too old.
 	if !pushToRelayFilter.IsOk(event) {
 		return false
 	}
