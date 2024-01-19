@@ -1,6 +1,7 @@
 package relays
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -331,10 +332,25 @@ func (r *RelayConnection) writeErrorShouldNotBeLogged(err error) bool {
 	return errors.Is(err, context.Canceled) || errors.Is(err, websocket.ErrCloseSent)
 }
 
+func parseMessage(messageBytes []byte) nostr.Envelope {
+	firstComma := bytes.Index(messageBytes, []byte{','})
+	if firstComma == -1 {
+		return nil
+	}
+	label := messageBytes[0:firstComma]
+	containsClose := bytes.Contains(label, []byte("CLOSE"))
+	if containsClose {
+		ce := nostr.CloseEnvelope("")
+		return &ce
+	}
+
+	return nostr.ParseMessage(messageBytes)
+}
+
 func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 	address := r.connectionFactory.Address()
 
-	envelope := nostr.ParseMessage(messageBytes)
+	envelope := parseMessage(messageBytes)
 	if envelope == nil {
 		defer r.metrics.ReportMessageReceived(address, MessageTypeUnknown, &err)
 		return errors.New("error parsing message, we are never going to find out what error unfortunately due to the design of this library")
@@ -405,6 +421,13 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 		}
 
 		r.passSendEventResponseToChannel(eventID, response)
+		return nil
+	case *nostr.CloseEnvelope:
+		defer r.metrics.ReportMessageReceived(address, MessageTypeClose, &err)
+		r.logger.
+			Debug().
+			WithField("message", string(messageBytes)).
+			Message("received a message (close)")
 		return nil
 	default:
 		defer r.metrics.ReportMessageReceived(address, MessageTypeUnknown, &err)
