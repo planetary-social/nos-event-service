@@ -30,6 +30,7 @@ var (
 	MessageTypeEvent   = MessageType{"event"}
 	MessageTypeAuth    = MessageType{"auth"}
 	MessageTypeOK      = MessageType{"ok"}
+	MessageTypeClose   = MessageType{"close"}
 	MessageTypeUnknown = MessageType{"unknown"}
 )
 
