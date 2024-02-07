@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"net/url"
 	"time"
 
 	"github.com/boreq/errors"
@@ -55,8 +56,15 @@ func (u UnverifiedEvent) Tags() []EventTag {
 	return internal.CopySlice(u.event.tags)
 }
 
+func (u UnverifiedEvent) IsInvalid() bool {
+	return u.event.IsInvalid()
+}
+
 func (u UnverifiedEvent) HasInvalidProfileTags() bool {
 	return u.event.HasInvalidProfileTags()
+}
+func (u UnverifiedEvent) HasInvalidRTags() bool {
+	return u.event.HasInvalidRTags()
 }
 
 func (u UnverifiedEvent) Raw() []byte {
@@ -128,8 +136,16 @@ func (e Event) Tags() []EventTag {
 	return internal.CopySlice(e.event.tags)
 }
 
+func (e Event) IsInvalid() bool {
+	return e.event.IsInvalid()
+}
+
 func (e Event) HasInvalidProfileTags() bool {
 	return e.event.HasInvalidProfileTags()
+}
+
+func (e Event) HasInvalidRTags() bool {
+	return e.event.HasInvalidRTags()
 }
 
 func (e Event) Content() string {
@@ -225,4 +241,35 @@ func (e parsedEvent) HasInvalidProfileTags() bool {
 		}
 	}
 	return false
+}
+
+func (e parsedEvent) HasInvalidRTags() bool {
+	for _, tag := range e.tags {
+		if !tag.IsRelay() {
+			continue
+		}
+
+		relay, err := tag.Relay()
+		if err != nil {
+			return true
+		}
+
+		if len(relay.s) > 2000 {
+			return true
+		}
+
+		parsed, parseErr := url.Parse(relay.s)
+		if parseErr != nil {
+			return true
+		}
+
+		if parsed.Scheme != "wss" && parsed.Scheme != "ws" {
+			return true
+		}
+	}
+	return false
+}
+
+func (e parsedEvent) IsInvalid() bool {
+	return e.HasInvalidProfileTags() || e.HasInvalidRTags()
 }

@@ -47,6 +47,9 @@ func NewSaveReceivedEventHandler(
 	}
 }
 
+// This handler is responsible for saving received events. It checks if the
+// event should be saved and if so, it saves it and publishes the id to the
+// internal db based event queue.
 func (h *SaveReceivedEventHandler) Handle(ctx context.Context, cmd SaveReceivedEvent) (err error) {
 	defer h.metrics.StartApplicationCall("saveReceivedEvent").End(&err)
 

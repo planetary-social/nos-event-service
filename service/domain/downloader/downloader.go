@@ -301,6 +301,7 @@ func (d *RelayDownloader) performTask(task Task) {
 // Run the filter specified by the task and for each event found publish it to all subscribers.
 func (d *RelayDownloader) performTaskWithErr(task Task) error {
 	ch, err := d.relayConnections.GetEvents(task.Ctx(), d.address, task.Filter())
+	filterJson, _ := task.Filter().MarshalJSON()
 	if err != nil {
 		return errors.Wrap(err, "error getting events ch")
 	}
@@ -309,6 +310,18 @@ func (d *RelayDownloader) performTaskWithErr(task Task) error {
 		if eventOrEOSE.EOSE() {
 			task.OnReceivedEOSE()
 		} else {
+			event := eventOrEOSE.Event()
+
+			// Don't event push invalid events to the queue
+			if event.IsInvalid() {
+				d.logger.
+					Trace().
+					WithField("event", event).
+					WithField("address", d.address.String()).
+					WithField("filter", string(filterJson)).
+					Message("invalid event, skipping")
+				continue
+			}
 			d.metrics.ReportReceivedEvent(d.address)
 			d.receivedEventPublisher.Publish(d.address, eventOrEOSE.Event())
 		}
