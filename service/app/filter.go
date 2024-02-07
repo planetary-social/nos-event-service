@@ -60,5 +60,5 @@ type Event interface {
 	Kind() domain.EventKind
 	Tags() []domain.EventTag
 	Raw() []byte
-	HasInvalidProfileTags() bool
+	IsInvalid() bool
 }

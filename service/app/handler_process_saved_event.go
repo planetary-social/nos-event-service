@@ -66,6 +66,7 @@ func NewProcessSavedEventHandler(
 	}
 }
 
+// This processes the internal db based event queue, the event is already in the database
 func (h *ProcessSavedEventHandler) Handle(ctx context.Context, cmd ProcessSavedEvent) (err error) {
 	defer h.metrics.StartApplicationCall("processSavedEvent").End(&err)
 
@@ -193,7 +194,7 @@ func (h *ProcessSavedEventHandler) maybeSendEventToRelay(ctx context.Context, ev
 }
 
 func (h *ProcessSavedEventHandler) shouldDisregardSendEventErr(err error) bool {
-	return errors.Is(err, relays.ErrEventReplaced)
+	return errors.Is(err, relays.ErrEventReplaced) || errors.Is(err, relays.ErrEventInvalid)
 }
 
 func ShouldSendEventToRelay(event Event) bool {
@@ -206,7 +207,7 @@ func ShouldSendEventToRelay(event Event) bool {
 		return false
 	}
 
-	if event.HasInvalidProfileTags() {
+	if event.IsInvalid() {
 		return false
 	}
 

@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/planetary-social/nos-event-service/internal/fixtures"
@@ -50,6 +51,49 @@ func TestEvent_HasInvalidProfileTags(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {
 			require.Equal(t, testCase.Result, testCase.Event.HasInvalidProfileTags())
+		})
+	}
+}
+func TestEvent_HasInvalidRTags(t *testing.T) {
+	largeString := strings.Repeat("a", 2000)
+
+	testCases := []struct {
+		Name   string
+		Event  domain.Event
+		Result bool
+	}{
+		{
+			Name:   "valid_single_relay",
+			Event:  fixtures.Event(fixtures.SomeEventKind(), []domain.EventTag{domain.MustNewEventTag([]string{"r", "wss://example-relay.com"})}, fixtures.SomeString()),
+			Result: false,
+		},
+		{
+			Name: "valid_multiple_relays",
+			Event: fixtures.Event(
+				fixtures.SomeEventKind(),
+				[]domain.EventTag{
+					domain.MustNewEventTag([]string{"r", "wss://relay1.com"}),
+					domain.MustNewEventTag([]string{"r", "wss://relay2.com", "read"}),
+					domain.MustNewEventTag([]string{"r", "wss://relay3.com", "write"}),
+				},
+				fixtures.SomeString(),
+			),
+			Result: false,
+		},
+		{
+			Name: "invalid_concatenated_relays",
+			Event: fixtures.Event(
+				fixtures.SomeEventKind(),
+				[]domain.EventTag{domain.MustNewEventTag([]string{"r", "wss://foobar.com" + largeString})},
+				fixtures.SomeString(),
+			),
+			Result: true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.Name, func(t *testing.T) {
+			require.Equal(t, testCase.Result, testCase.Event.HasInvalidRTags())
 		})
 	}
 }

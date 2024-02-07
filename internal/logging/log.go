@@ -1,5 +1,16 @@
 package logging
 
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"reflect"
+	"runtime"
+
+	"github.com/davecgh/go-spew/spew"
+)
+
 const (
 	loggerFieldName  = "name"
 	loggerFieldError = "error"
@@ -189,4 +200,50 @@ func (d devNullLoggerEntry) WithField(key string, v any) Entry {
 }
 
 func (d devNullLoggerEntry) Message(msg string) {
+}
+
+func Inspect(args ...interface{}) {
+	for _, arg := range args {
+		val := reflect.ValueOf(arg)
+
+		if val.Kind() == reflect.String {
+			fmt.Println(arg)
+			continue
+		}
+		// Use String() or MarshalJSON if available
+		if val.CanInterface() {
+			if marshaler, ok := arg.(json.Marshaler); ok {
+				if jsonBytes, err := marshaler.MarshalJSON(); err == nil {
+					fmt.Println(string(jsonBytes))
+					continue
+				}
+			}
+			if stringer, ok := arg.(fmt.Stringer); ok {
+				fmt.Println(stringer.String())
+				continue
+			}
+		}
+
+		spew.Dump(arg)
+	}
+	println()
+}
+
+// Debugging function for development to use voice messages to detect issues
+// in the code.
+var Say func(string)
+
+func init() {
+	if os.Getenv("EVENTS_ENVIRONMENT") != "PRODUCTION" && runtime.GOOS == "darwin" {
+		Say = func(text string) {
+			cmd := exec.Command("say", text)
+			if err := cmd.Run(); err != nil {
+				fmt.Println("Failed to execute say command:", err)
+			}
+		}
+	} else {
+		Say = func(text string) {
+			// This function intentionally left blank.
+		}
+	}
 }
