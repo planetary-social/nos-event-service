@@ -2,8 +2,6 @@ package relays
 
 import (
 	"context"
-	"fmt"
-	"os/exec"
 	"strings"
 
 	"github.com/boreq/errors"
@@ -29,13 +27,6 @@ func (s *EventSender) SendEvent(ctx context.Context, address domain.RelayAddress
 	return nil
 }
 
-func say(text string) {
-	cmd := exec.Command("say", text)
-	if err := cmd.Run(); err != nil {
-		// Handle the error if the command fails
-		fmt.Println("Failed to execute say command:", err)
-	}
-}
 func (s *EventSender) maybeConvertError(err error) error {
 	var okResponseErr OKResponseError
 	if !errors.As(err, &okResponseErr) {
