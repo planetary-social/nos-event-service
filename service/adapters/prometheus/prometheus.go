@@ -32,10 +32,12 @@ const (
 
 	labelReason = "reason"
 
-	labelDecision = "decision"
+	labelDecision   = "decision"
+	labelNoticeType = "noticeType"
 )
 
 type Prometheus struct {
+	noticeTypeCounter                       *prometheus.CounterVec
 	applicationHandlerCallsCounter          *prometheus.CounterVec
 	applicationHandlerCallDurationHistogram *prometheus.HistogramVec
 	relayDownloadersGauge                   prometheus.Gauge
@@ -56,6 +58,13 @@ type Prometheus struct {
 }
 
 func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
+	noticeTypeCounter := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "notice_type_total",
+			Help: "Total number of notices per notice type.",
+		},
+		[]string{labelAddress, labelNoticeType},
+	)
 	applicationHandlerCallsCounter := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "application_handler_calls_total",
@@ -154,6 +163,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 
 	reg := prometheus.NewRegistry()
 	for _, v := range []prometheus.Collector{
+		noticeTypeCounter,
 		applicationHandlerCallsCounter,
 		applicationHandlerCallDurationHistogram,
 		versionGague,
@@ -191,6 +201,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 	}
 
 	return &Prometheus{
+		noticeTypeCounter:                       noticeTypeCounter,
 		applicationHandlerCallsCounter:          applicationHandlerCallsCounter,
 		applicationHandlerCallDurationHistogram: applicationHandlerCallDurationHistogram,
 		relayDownloadersGauge:                   relayDownloadersGauge,
@@ -278,6 +289,13 @@ func (p *Prometheus) ReportEventSentToRelay(address domain.RelayAddress, decisio
 		labelAddress:  address.String(),
 		labelDecision: decision.String(),
 		labelResult:   result.String(),
+	}).Inc()
+}
+
+func (p *Prometheus) ReportNotice(address domain.RelayAddress, noticeType relays.NoticeType) {
+	p.noticeTypeCounter.With(prometheus.Labels{
+		labelAddress:    address.String(),
+		labelNoticeType: string(noticeType),
 	}).Inc()
 }
 

@@ -372,7 +372,7 @@ func (t *TimeWindowTaskGenerator) Generate(ctx context.Context, kinds []domain.E
 func (t *TimeWindowTaskGenerator) maybeGenerateNewTracker(ctx context.Context) (*TimeWindowTaskTracker, bool, error) {
 	nextWindow := t.lastWindow.Advance()
 	now := t.currentTimeProvider.GetCurrentTime()
-	if nextWindow.End().After(now.Add(-time.Minute)) {
+	if nextWindow.End().After(now.Add(-windowSize)) {
 		return nil, false, nil
 	}
 	t.lastWindow = nextWindow

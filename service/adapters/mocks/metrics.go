@@ -5,6 +5,7 @@ import (
 
 	"github.com/planetary-social/nos-event-service/service/app"
 	"github.com/planetary-social/nos-event-service/service/domain"
+	"github.com/planetary-social/nos-event-service/service/domain/relays"
 )
 
 type Metrics struct {
@@ -37,6 +38,9 @@ func (m Metrics) ReportNumberOfStoredEvents(n int) {
 }
 
 func (m Metrics) ReportEventSentToRelay(address domain.RelayAddress, decision app.SendEventToRelayDecision, result app.SendEventToRelayResult) {
+}
+
+func (m Metrics) ReportNotice(address domain.RelayAddress, noticeType relays.NoticeType) {
 }
 
 type ApplicationCall struct {
