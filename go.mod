@@ -7,7 +7,6 @@ require (
 	github.com/ThreeDotsLabs/watermill-googlecloud v1.0.13
 	github.com/boreq/errors v0.1.0
 	github.com/boreq/rest v0.1.0
-	github.com/davecgh/go-spew v1.1.1
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
 	github.com/google/wire v0.5.0
 	github.com/gorilla/mux v1.8.1
@@ -37,6 +36,7 @@ require (
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2 // indirect
 	github.com/cenkalti/backoff/v3 v3.2.2 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/decred/dcrd/crypto/blake256 v1.0.1 // indirect
 	github.com/dgraph-io/ristretto v0.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect

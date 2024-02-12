@@ -339,3 +339,6 @@ func (m mockMetrics) ReportMessageReceived(address domain.RelayAddress, messageT
 
 func (m mockMetrics) ReportRelayDisconnection(address domain.RelayAddress, err error) {
 }
+
+func (m mockMetrics) ReportNotice(address domain.RelayAddress, noticeType relays.NoticeType) {
+}

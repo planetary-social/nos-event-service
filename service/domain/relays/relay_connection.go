@@ -5,7 +5,10 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"regexp"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/boreq/errors"
@@ -18,6 +21,7 @@ import (
 	"github.com/planetary-social/nos-event-service/service/domain/relays/transport"
 )
 
+const relayAddress = "wss://relay.nostr.com.au"
 const (
 	ReconnectionBackoff        = 5 * time.Minute
 	MaxDialReconnectionBackoff = 30 * time.Minute
@@ -51,6 +55,69 @@ type ConnectionFactory interface {
 	Address() domain.RelayAddress
 }
 
+type RateLimitNoticeBackoffManager struct {
+	address              domain.RelayAddress
+	rateLimitNoticeCount int32
+	lastBumpTime         atomic.Value // Use atomic.Value for time.Time
+}
+
+func (r *RateLimitNoticeBackoffManager) updateLastBumpTime() {
+	r.lastBumpTime.Store(time.Now())
+}
+
+func (r *RateLimitNoticeBackoffManager) getLastBumpTime() time.Time {
+	return r.lastBumpTime.Load().(time.Time)
+}
+
+func NewRateLimitNoticeBackoffManager(address domain.RelayAddress) *RateLimitNoticeBackoffManager {
+	r := &RateLimitNoticeBackoffManager{
+		address:              address,
+		rateLimitNoticeCount: 0,
+	}
+
+	r.updateLastBumpTime()
+	return r
+}
+
+func (r *RateLimitNoticeBackoffManager) Bump() {
+	timeSinceLastBump := time.Since(r.getLastBumpTime())
+	if timeSinceLastBump < 500*time.Millisecond {
+		// Give some time for the rate limit to be lifted before increasing the counter
+		return
+	}
+
+	atomic.AddInt32(&r.rateLimitNoticeCount, 1)
+	r.updateLastBumpTime()
+}
+
+// logPeriodically executes the passed action function if the current time in milliseconds
+// modulo logInterval equals zero. This approach allows executing the action periodically,
+// approximating the execution to happen once every `logInterval` milliseconds.
+func logPeriodically(action func(), logInterval int64) {
+	currentTimeMillis := time.Now().UnixNano() / int64(time.Millisecond)
+	if currentTimeMillis%logInterval == 0 {
+		action()
+	}
+}
+
+func (r *RateLimitNoticeBackoffManager) Wait() {
+	if r.rateLimitNoticeCount <= 0 {
+		return
+	}
+
+	backoffMs := int(math.Pow(2, float64(r.rateLimitNoticeCount))) * 100
+
+	timeSinceLastBump := time.Since(r.getLastBumpTime())
+	if timeSinceLastBump > 5*time.Second {
+		atomic.AddInt32(&r.rateLimitNoticeCount, -1)
+		r.updateLastBumpTime()
+	}
+
+	if backoffMs > 0 {
+		time.Sleep(time.Duration(backoffMs) * time.Millisecond)
+	}
+}
+
 type RelayConnection struct {
 	connectionFactory ConnectionFactory
 	logger            logging.Logger
@@ -60,14 +127,14 @@ type RelayConnection struct {
 	state      RelayConnectionState
 	stateMutex sync.Mutex
 
-	subscriptions                map[transport.SubscriptionID]subscription
-	subscriptionsUpdatedCh       chan struct{}
-	subscriptionsUpdatedChClosed bool
-	subscriptionsMutex           sync.Mutex
+	subscriptions          map[transport.SubscriptionID]subscription
+	subscriptionsUpdatedCh chan struct{}
+	subscriptionsMutex     sync.Mutex
 
-	eventsToSend      map[domain.EventId]*eventToSend
-	eventsToSendMutex sync.Mutex
-	newEventsCh       chan domain.Event
+	eventsToSend                  map[domain.EventId]*eventToSend
+	eventsToSendMutex             sync.Mutex
+	newEventsCh                   chan domain.Event
+	rateLimitNoticeBackoffManager *RateLimitNoticeBackoffManager
 }
 
 func NewRelayConnection(
@@ -76,15 +143,16 @@ func NewRelayConnection(
 	metrics Metrics,
 ) *RelayConnection {
 	return &RelayConnection{
-		connectionFactory:      connectionFactory,
-		logger:                 logger.New(fmt.Sprintf("relayConnection(%s)", connectionFactory.Address().String())),
-		metrics:                metrics,
-		backoffManager:         NewDefaultBackoffManager(),
-		state:                  RelayConnectionStateInitializing,
-		subscriptions:          make(map[transport.SubscriptionID]subscription),
-		subscriptionsUpdatedCh: make(chan struct{}),
-		eventsToSend:           make(map[domain.EventId]*eventToSend),
-		newEventsCh:            make(chan domain.Event),
+		connectionFactory:             connectionFactory,
+		logger:                        logger.New(fmt.Sprintf("relayConnection(%s)", connectionFactory.Address().String())),
+		metrics:                       metrics,
+		backoffManager:                NewDefaultBackoffManager(),
+		state:                         RelayConnectionStateInitializing,
+		subscriptions:                 make(map[transport.SubscriptionID]subscription),
+		subscriptionsUpdatedCh:        make(chan struct{}),
+		eventsToSend:                  make(map[domain.EventId]*eventToSend),
+		newEventsCh:                   make(chan domain.Event),
+		rateLimitNoticeBackoffManager: NewRateLimitNoticeBackoffManager(connectionFactory.Address()),
 	}
 }
 
@@ -136,6 +204,7 @@ func (r *RelayConnection) GetEvents(ctx context.Context, filter domain.Filter) (
 	r.triggerSubscriptionUpdate()
 
 	go func() {
+		// Context is cancelled from a task.CheckIfDoneAndEnd() triggered from EOSE messages
 		<-ctx.Done()
 		if err := r.removeSubscriptionChannel(ch); err != nil {
 			panic(err)
@@ -145,12 +214,13 @@ func (r *RelayConnection) GetEvents(ctx context.Context, filter domain.Filter) (
 	return ch, nil
 }
 
+// pushes the event to the eventsToSend channel and blocks until a sendEventResponse is received
 func (r *RelayConnection) SendEvent(ctx context.Context, event domain.Event) error {
 	ctx, cancel := context.WithTimeout(ctx, sendEventTimeout)
 	defer cancel()
 
 	ch := make(chan sendEventResponse)
-	shouldNotify := r.scheduleSendingEvent(ctx, event, ch)
+	isFirstSchedule := r.scheduleSendingEvent(ctx, event, ch)
 
 	defer func() {
 		if err := r.removeEventChannel(event, ch); err != nil {
@@ -158,7 +228,7 @@ func (r *RelayConnection) SendEvent(ctx context.Context, event domain.Event) err
 		}
 	}()
 
-	if shouldNotify {
+	if isFirstSchedule {
 		select {
 		case r.newEventsCh <- event:
 		case <-ctx.Done():
@@ -259,15 +329,10 @@ func (r *RelayConnection) removeEventChannel(event domain.Event, chToRemove chan
 }
 
 func (r *RelayConnection) triggerSubscriptionUpdate() {
-	if !r.subscriptionsUpdatedChClosed {
-		r.subscriptionsUpdatedChClosed = true
-		close(r.subscriptionsUpdatedCh)
+	select {
+	case r.subscriptionsUpdatedCh <- struct{}{}:
+	default:
 	}
-}
-
-func (r *RelayConnection) resetSubscriptionUpdateCh() {
-	r.subscriptionsUpdatedChClosed = false
-	r.subscriptionsUpdatedCh = make(chan struct{})
 }
 
 func (r *RelayConnection) run(ctx context.Context) error {
@@ -341,10 +406,52 @@ func parseMessage(messageBytes []byte) nostr.Envelope {
 	containsClose := bytes.Contains(label, []byte("CLOSE"))
 	if containsClose {
 		ce := nostr.CloseEnvelope("")
-		return &ce
+		if err := ce.UnmarshalJSON(messageBytes); err == nil {
+			return &ce
+		}
 	}
 
 	return nostr.ParseMessage(messageBytes)
+}
+
+type NoticeType string
+
+const (
+	NoticeTypeEmpty      NoticeType = "EMPTY"
+	NoticeOnlyWithSearch NoticeType = "ONLY_WITH_SEARCH"
+	NoticeRateLimit      NoticeType = "RATE_LIMIT"
+	NoticeAuthRequired   NoticeType = "AUTH_REQUIRED"
+	NoticeUnknownFeed    NoticeType = "UNKNOWN_FEED"
+	NoticeInvalid        NoticeType = "INVALID"
+	NoticeUnknownError   NoticeType = "UNKNOWN_ERROR"
+	NoticeUnknown        NoticeType = "UNKNOWN"
+)
+
+var unknownFeedRegexp = regexp.MustCompile(`unknown.*feed`)
+var rateLimitRegexp = regexp.MustCompile(`rate.*limit|too fast`)
+
+func GetNoticeType(content string) NoticeType {
+	content = strings.ToLower(content)
+	content = strings.TrimSpace(content)
+
+	switch {
+	case content == "":
+		return NoticeTypeEmpty
+	case strings.HasSuffix(content, "only filter with search is supported"):
+		return NoticeOnlyWithSearch
+	case rateLimitRegexp.MatchString(content):
+		return NoticeRateLimit
+	case strings.Contains(content, "auth"):
+		return NoticeAuthRequired
+	case unknownFeedRegexp.MatchString(content):
+		return NoticeUnknownFeed
+	case strings.Contains(content, "invalid"):
+		return NoticeInvalid
+	case strings.Contains(content, "error"):
+		return NoticeUnknownError
+	default:
+		return NoticeUnknown
+	}
 }
 
 func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
@@ -391,10 +498,19 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 		return nil
 	case *nostr.NoticeEnvelope:
 		defer r.metrics.ReportMessageReceived(address, MessageTypeNotice, &err)
+		noticeType := GetNoticeType(string(*v))
+
 		r.logger.
 			Debug().
 			WithField("message", string(messageBytes)).
+			WithField("noticeType", noticeType).
 			Message("received a message (notice)")
+
+		defer r.metrics.ReportNotice(address, noticeType)
+
+		if noticeType == NoticeRateLimit {
+			r.rateLimitNoticeBackoffManager.Bump()
+		}
 		return nil
 	case *nostr.AuthEnvelope:
 		defer r.metrics.ReportMessageReceived(address, MessageTypeAuth, &err)
@@ -482,7 +598,7 @@ func (r *RelayConnection) manageSubs(ctx context.Context, conn Connection) error
 
 		select {
 		case <-r.subscriptionsUpdatedCh:
-			continue
+			// A subscription update has been triggered; continue to reevaluate subscriptions.
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -496,8 +612,6 @@ func (r *RelayConnection) updateSubs(
 	r.subscriptionsMutex.Lock()
 	defer r.subscriptionsMutex.Unlock()
 
-	r.resetSubscriptionUpdateCh()
-
 	for _, subscriptionID := range activeSubscriptions.List() {
 		if _, ok := r.subscriptions[subscriptionID]; !ok {
 			msg := transport.NewMessageClose(subscriptionID)
@@ -506,6 +620,7 @@ func (r *RelayConnection) updateSubs(
 				WithField("subscriptionID", subscriptionID).
 				Message("closing subscription")
 
+			r.rateLimitNoticeBackoffManager.Wait()
 			if err := conn.SendMessage(msg); err != nil {
 				return errors.Wrap(err, "writing close message error")
 			}
@@ -522,6 +637,7 @@ func (r *RelayConnection) updateSubs(
 				WithField("subscriptionID", subscriptionID).
 				Message("opening subscription")
 
+			r.rateLimitNoticeBackoffManager.Wait()
 			if err := conn.SendMessage(msg); err != nil {
 				return errors.Wrap(err, "writing req message error")
 			}
@@ -548,6 +664,7 @@ func (r *RelayConnection) copyAllPastEvents() []domain.Event {
 func (r *RelayConnection) sendEvents(ctx context.Context, conn Connection) error {
 	for _, event := range r.copyAllPastEvents() {
 		msg := transport.NewMessageEvent(event)
+		r.rateLimitNoticeBackoffManager.Wait()
 		if err := conn.SendMessage(msg); err != nil {
 			return errors.Wrap(err, "error writing a message")
 		}
@@ -557,6 +674,7 @@ func (r *RelayConnection) sendEvents(ctx context.Context, conn Connection) error
 		select {
 		case event := <-r.newEventsCh:
 			msg := transport.NewMessageEvent(event)
+			r.rateLimitNoticeBackoffManager.Wait()
 			if err := conn.SendMessage(msg); err != nil {
 				return errors.Wrap(err, "error writing a message")
 			}

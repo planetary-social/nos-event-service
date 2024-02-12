@@ -14,6 +14,7 @@ type Metrics interface {
 	ReportNumberOfSubscriptions(address domain.RelayAddress, n int)
 	ReportMessageReceived(address domain.RelayAddress, messageType MessageType, err *error)
 	ReportRelayDisconnection(address domain.RelayAddress, err error)
+	ReportNotice(address domain.RelayAddress, noticeType NoticeType)
 }
 
 type MessageType struct {
@@ -93,6 +94,7 @@ func (d *RelayConnections) storeMetrics() {
 	d.metrics.ReportRelayConnectionsState(m)
 }
 
+// Notice that a single connection can serve multiple req. This can cause a too many concurrent requests error if not throttled.
 func (r *RelayConnections) getConnection(relayAddress domain.RelayAddress) *RelayConnection {
 	r.connectionsLock.Lock()
 	defer r.connectionsLock.Unlock()
