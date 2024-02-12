@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"reflect"
 	"runtime"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 )
@@ -200,6 +201,16 @@ func (d devNullLoggerEntry) WithField(key string, v any) Entry {
 }
 
 func (d devNullLoggerEntry) Message(msg string) {
+}
+
+// logPeriodically executes the passed action function if the current time in milliseconds
+// modulo logInterval equals zero. This approach allows executing the action periodically,
+// approximating the execution to happen once every `logInterval` milliseconds.
+func LogPeriodically(action func(), logInterval int64) {
+	currentTimeMillis := time.Now().UnixNano() / int64(time.Millisecond)
+	if currentTimeMillis%logInterval == 0 {
+		action()
+	}
 }
 
 func Inspect(args ...interface{}) {

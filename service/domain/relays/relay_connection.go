@@ -21,7 +21,6 @@ import (
 	"github.com/planetary-social/nos-event-service/service/domain/relays/transport"
 )
 
-const relayAddress = "wss://relay.nostr.com.au"
 const (
 	ReconnectionBackoff        = 5 * time.Minute
 	MaxDialReconnectionBackoff = 30 * time.Minute
@@ -88,16 +87,6 @@ func (r *RateLimitNoticeBackoffManager) Bump() {
 
 	atomic.AddInt32(&r.rateLimitNoticeCount, 1)
 	r.updateLastBumpTime()
-}
-
-// logPeriodically executes the passed action function if the current time in milliseconds
-// modulo logInterval equals zero. This approach allows executing the action periodically,
-// approximating the execution to happen once every `logInterval` milliseconds.
-func logPeriodically(action func(), logInterval int64) {
-	currentTimeMillis := time.Now().UnixNano() / int64(time.Millisecond)
-	if currentTimeMillis%logInterval == 0 {
-		action()
-	}
 }
 
 func (r *RateLimitNoticeBackoffManager) Wait() {
