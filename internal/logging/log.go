@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"reflect"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -203,12 +204,23 @@ func (d devNullLoggerEntry) WithField(key string, v any) Entry {
 func (d devNullLoggerEntry) Message(msg string) {
 }
 
-// logPeriodically executes the passed action function if the current time in milliseconds
-// modulo logInterval equals zero. This approach allows executing the action periodically,
-// approximating the execution to happen once every `logInterval` milliseconds.
-func LogPeriodically(action func(), logInterval int64) {
-	currentTimeMillis := time.Now().UnixNano() / int64(time.Millisecond)
-	if currentTimeMillis%logInterval == 0 {
+// ConfigureTimeThrottler returns a throttled version of the provided action function.
+// The returned function will execute the action at most once every specified duration.
+// TODO: Maybe this should be moved to a separate package.
+func ConfigureTimeThrottler(duration time.Duration) func(action func()) {
+	var (
+		lastExecution time.Time
+		mu            sync.Mutex
+	)
+	return func(action func()) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		if time.Since(lastExecution) < duration {
+			return
+		}
+
+		lastExecution = time.Now()
 		action()
 	}
 }

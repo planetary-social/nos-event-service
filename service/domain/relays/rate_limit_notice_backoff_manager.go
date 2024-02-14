@@ -31,12 +31,16 @@ func (r *RateLimitNoticeBackoffManager) Bump() {
 	r.updateLastBumpTime()
 }
 
+func (r *RateLimitNoticeBackoffManager) IsSet() bool {
+	rateLimitNoticeCount := atomic.LoadInt32(&r.rateLimitNoticeCount)
+	return rateLimitNoticeCount > 0
+}
+
 const maxBackoffMs = 10000
 const secondsToDecreaseRateLimitNoticeCount = 60 * 5 // 5 minutes = 300 seconds
 
 func (r *RateLimitNoticeBackoffManager) Wait() {
-	rateLimitNoticeCount := atomic.LoadInt32(&r.rateLimitNoticeCount)
-	if rateLimitNoticeCount <= 0 {
+	if !r.IsSet() {
 		return
 	}
 

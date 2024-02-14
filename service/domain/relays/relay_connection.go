@@ -333,21 +333,19 @@ func (r *RelayConnection) writeErrorShouldNotBeLogged(err error) bool {
 	return errors.Is(err, context.Canceled) || errors.Is(err, websocket.ErrCloseSent)
 }
 
-func parseMessage(messageBytes []byte) nostr.Envelope {
+func parseEnvelope(messageBytes []byte) (nostr.Envelope, bool) {
 	firstComma := bytes.Index(messageBytes, []byte{','})
 	if firstComma == -1 {
-		return nil
+		return nil, false
 	}
 	label := messageBytes[0:firstComma]
-	containsClose := bytes.Contains(label, []byte("CLOSE"))
-	if containsClose {
-		ce := nostr.CloseEnvelope("")
-		if err := ce.UnmarshalJSON(messageBytes); err == nil {
-			return &ce
-		}
+	containsClosed := bytes.Contains(label, []byte("CLOSED"))
+	if containsClosed {
+		return nil, true
 	}
 
-	return nostr.ParseMessage(messageBytes)
+	nostrEnvelope := nostr.ParseMessage(messageBytes)
+	return nostrEnvelope, false
 }
 
 type NoticeType string
@@ -390,12 +388,20 @@ func GetNoticeType(content string) NoticeType {
 	}
 }
 
+var everyTenSeconds func(func()) = logging.ConfigureTimeThrottler(10 * time.Second)
+
 func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 	address := r.connectionFactory.Address()
 
-	envelope := parseMessage(messageBytes)
-	if envelope == nil {
+	envelope, isClosed := parseEnvelope(messageBytes)
+	if envelope == nil && !isClosed {
 		defer r.metrics.ReportMessageReceived(address, MessageTypeUnknown, &err)
+		everyTenSeconds(func() {
+			r.logger.
+				Debug().
+				WithField("message", string(messageBytes)).
+				Message("received an unrecognized envelope message")
+		})
 		return errors.New("error parsing message, we are never going to find out what error unfortunately due to the design of this library")
 	}
 
@@ -474,16 +480,35 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 
 		r.passSendEventResponseToChannel(eventID, response)
 		return nil
-	case *nostr.CloseEnvelope:
-		defer r.metrics.ReportMessageReceived(address, MessageTypeClose, &err)
-		r.logger.
-			Debug().
-			WithField("message", string(messageBytes)).
-			Message("received a message (close)")
-		return nil
 	default:
-		defer r.metrics.ReportMessageReceived(address, MessageTypeUnknown, &err)
-		return errors.New("unknown message type")
+		if isClosed {
+			defer r.metrics.ReportMessageReceived(address, MessageTypeClose, &err)
+			r.logger.
+				Debug().
+				WithField("message", string(messageBytes)).
+				Message("received a message (closed)")
+
+			if r.rateLimitNoticeBackoffManager.rateLimitNoticeCount <= 0 {
+				// Let's add a rate limit for close messages too, just in case some
+				// relays close from rate limiting without sending a notice. It
+				// makes also sense event if it's not for rate limit reasons but
+				// just to avoid spamming relays that we know are closing often
+				r.rateLimitNoticeBackoffManager.Bump()
+			}
+			return nil
+		} else {
+			defer r.metrics.ReportMessageReceived(address, MessageTypeUnknown, &err)
+
+			// Add some traces to investigate these unknown messages
+			everyTenSeconds(func() {
+				r.logger.
+					Debug().
+					WithField("message", string(messageBytes)).
+					Message("received an unknown message")
+			})
+			return errors.New("unknown message type")
+
+		}
 	}
 }
 
