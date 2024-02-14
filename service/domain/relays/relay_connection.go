@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/boreq/errors"
@@ -54,59 +53,6 @@ type ConnectionFactory interface {
 	Address() domain.RelayAddress
 }
 
-type RateLimitNoticeBackoffManager struct {
-	address              domain.RelayAddress
-	rateLimitNoticeCount int32
-	lastBumpTime         atomic.Value // Use atomic.Value for time.Time
-}
-
-func (r *RateLimitNoticeBackoffManager) updateLastBumpTime() {
-	r.lastBumpTime.Store(time.Now())
-}
-
-func (r *RateLimitNoticeBackoffManager) getLastBumpTime() time.Time {
-	return r.lastBumpTime.Load().(time.Time)
-}
-
-func NewRateLimitNoticeBackoffManager(address domain.RelayAddress) *RateLimitNoticeBackoffManager {
-	r := &RateLimitNoticeBackoffManager{
-		address:              address,
-		rateLimitNoticeCount: 0,
-	}
-
-	r.updateLastBumpTime()
-	return r
-}
-
-func (r *RateLimitNoticeBackoffManager) Bump() {
-	timeSinceLastBump := time.Since(r.getLastBumpTime())
-	if timeSinceLastBump < 500*time.Millisecond {
-		// Give some time for the rate limit to be lifted before increasing the counter
-		return
-	}
-
-	atomic.AddInt32(&r.rateLimitNoticeCount, 1)
-	r.updateLastBumpTime()
-}
-
-func (r *RateLimitNoticeBackoffManager) Wait() {
-	if r.rateLimitNoticeCount <= 0 {
-		return
-	}
-
-	backoffMs := int(math.Pow(2, float64(r.rateLimitNoticeCount))) * 100
-
-	timeSinceLastBump := time.Since(r.getLastBumpTime())
-	if timeSinceLastBump > 5*time.Second {
-		atomic.AddInt32(&r.rateLimitNoticeCount, -1)
-		r.updateLastBumpTime()
-	}
-
-	if backoffMs > 0 {
-		time.Sleep(time.Duration(backoffMs) * time.Millisecond)
-	}
-}
-
 type RelayConnection struct {
 	connectionFactory ConnectionFactory
 	logger            logging.Logger
@@ -128,6 +74,7 @@ type RelayConnection struct {
 
 func NewRelayConnection(
 	connectionFactory ConnectionFactory,
+	rateLimitNoticeBackoffManager *RateLimitNoticeBackoffManager,
 	logger logging.Logger,
 	metrics Metrics,
 ) *RelayConnection {
@@ -141,7 +88,7 @@ func NewRelayConnection(
 		subscriptionsUpdatedCh:        make(chan struct{}),
 		eventsToSend:                  make(map[domain.EventId]*eventToSend),
 		newEventsCh:                   make(chan domain.Event),
-		rateLimitNoticeBackoffManager: NewRateLimitNoticeBackoffManager(connectionFactory.Address()),
+		rateLimitNoticeBackoffManager: rateLimitNoticeBackoffManager,
 	}
 }
 

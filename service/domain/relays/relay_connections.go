@@ -45,17 +45,19 @@ type RelayConnections struct {
 
 	longCtx context.Context
 
-	connections     map[domain.RelayAddress]*RelayConnection
-	connectionsLock sync.Mutex
+	connections                    map[domain.RelayAddress]*RelayConnection
+	rateLimitNoticeBackoffManagers map[string]*RateLimitNoticeBackoffManager
+	connectionsLock                sync.Mutex
 }
 
 func NewRelayConnections(ctx context.Context, logger logging.Logger, metrics Metrics) *RelayConnections {
 	v := &RelayConnections{
-		logger:          logger.New("relayConnections"),
-		metrics:         metrics,
-		longCtx:         ctx,
-		connections:     make(map[domain.RelayAddress]*RelayConnection),
-		connectionsLock: sync.Mutex{},
+		logger:                         logger.New("relayConnections"),
+		metrics:                        metrics,
+		longCtx:                        ctx,
+		connections:                    make(map[domain.RelayAddress]*RelayConnection),
+		rateLimitNoticeBackoffManagers: make(map[string]*RateLimitNoticeBackoffManager),
+		connectionsLock:                sync.Mutex{},
 	}
 	go v.storeMetricsLoop(ctx)
 	return v
@@ -104,7 +106,17 @@ func (r *RelayConnections) getConnection(relayAddress domain.RelayAddress) *Rela
 	}
 
 	factory := NewWebsocketConnectionFactory(relayAddress, r.logger)
-	connection := NewRelayConnection(factory, r.logger, r.metrics)
+
+	// Sometimes different addreses can point to the same relay. Example is
+	// wss://feeds.nostr.band/video and wss://feeds.nostr.band/audio.  For these
+	// cases, we want to share the rate limit notice backoff manager.
+	rateLimitNoticeBackoffManager, exists := r.rateLimitNoticeBackoffManagers[relayAddress.HostWithoutPort()]
+	if !exists {
+		rateLimitNoticeBackoffManager = NewRateLimitNoticeBackoffManager()
+		r.rateLimitNoticeBackoffManagers[relayAddress.HostWithoutPort()] = rateLimitNoticeBackoffManager
+	}
+
+	connection := NewRelayConnection(factory, rateLimitNoticeBackoffManager, r.logger, r.metrics)
 	go connection.Run(r.longCtx)
 
 	r.connections[relayAddress] = connection

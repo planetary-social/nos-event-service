@@ -135,9 +135,10 @@ type testConnection struct {
 func newTestConnection(tb testing.TB, ctx context.Context) *testConnection {
 	connection := newMockConnection()
 	factory := newMockConnectionFactory(connection)
+	backoffManager := relays.NewRateLimitNoticeBackoffManager()
 	metrics := newMockMetrics()
 	logger := logging.NewDevNullLogger()
-	relayConnection := relays.NewRelayConnection(factory, logger, metrics)
+	relayConnection := relays.NewRelayConnection(factory, backoffManager, logger, metrics)
 	go relayConnection.Run(ctx)
 
 	return &testConnection{

@@ -44,8 +44,12 @@ func TestRelayAddress(t *testing.T) {
 			Output: "wss://example.com",
 		},
 		{
+			Input:  "wss://EXAMPLE.com/FooBar ",
+			Output: "wss://example.com/FooBar",
+		},
+		{
 			Input:  "wss://example1.com/ wss://example2.com",
-			Output: "wss://example1.com/ wss://example2.com",
+			Output: "wss://example1.com/%20wss://example2.com",
 		},
 		{
 			Input:         "wss:// wss://example.com",
