@@ -362,7 +362,29 @@ const (
 )
 
 var unknownFeedRegexp = regexp.MustCompile(`unknown.*feed`)
-var rateLimitRegexp = regexp.MustCompile(`rate.*limit|too fast`)
+var rateLimitRegexp = regexp.MustCompile(`rate.*limit|too fast|slow.*down`)
+
+type ClosedType string
+
+const (
+	ClosedTypeRateLimit ClosedType = "RATE_LIMIT"
+	ClosedTypeAuth      ClosedType = "AUTH_REQUIRED"
+	ClosedTypeUnknown   ClosedType = "UNKNOWN"
+)
+
+func GetClosedType(content string) ClosedType {
+	content = strings.ToLower(content)
+	content = strings.TrimSpace(content)
+
+	switch {
+	case rateLimitRegexp.MatchString(content):
+		return ClosedTypeRateLimit
+	case strings.Contains(content, "auth"):
+		return ClosedTypeAuth
+	default:
+		return ClosedTypeUnknown
+	}
+}
 
 func GetNoticeType(content string) NoticeType {
 	content = strings.ToLower(content)
@@ -488,11 +510,13 @@ func (r *RelayConnection) handleMessage(messageBytes []byte) (err error) {
 				WithField("message", string(messageBytes)).
 				Message("received a message (closed)")
 
-			if r.rateLimitNoticeBackoffManager.rateLimitNoticeCount <= 0 {
-				// Let's add a rate limit for close messages too, just in case some
-				// relays close from rate limiting without sending a notice. It
-				// makes also sense event if it's not for rate limit reasons but
-				// just to avoid spamming relays that we know are closing often
+			closedType := GetClosedType(string(messageBytes))
+			if closedType == ClosedTypeRateLimit || r.rateLimitNoticeBackoffManager.rateLimitNoticeCount <= 0 {
+				// Always bump rate limit if it's a rate limit CLOSED message,
+				// but also do it if there is no current rate limit.  just in
+				// case some relays close from rate limiting without sending a
+				// notice or updating the CLOSED message.
+
 				r.rateLimitNoticeBackoffManager.Bump()
 			}
 			return nil
