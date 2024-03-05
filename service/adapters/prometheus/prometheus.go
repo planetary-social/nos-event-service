@@ -272,7 +272,7 @@ func (p *Prometheus) ReportNumberOfSubscriptions(address domain.RelayAddress, n 
 
 func (p *Prometheus) ReportRateLimitBackoffMs(address domain.RelayAddress, n int) {
 	p.relayRateLimitBackoffMsGauge.With(prometheus.Labels{
-		labelAddress: address.String(),
+		labelAddress: address.HostWithoutPort(),
 	}).Set(float64(n))
 }
 
