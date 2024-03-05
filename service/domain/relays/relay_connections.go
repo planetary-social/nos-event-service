@@ -12,6 +12,7 @@ import (
 type Metrics interface {
 	ReportRelayConnectionsState(m map[domain.RelayAddress]RelayConnectionState)
 	ReportNumberOfSubscriptions(address domain.RelayAddress, n int)
+	ReportRateLimitBackoffMs(address domain.RelayAddress, n int)
 	ReportMessageReceived(address domain.RelayAddress, messageType MessageType, err *error)
 	ReportRelayDisconnection(address domain.RelayAddress, err error)
 	ReportNotice(address domain.RelayAddress, noticeType NoticeType)
@@ -91,9 +92,20 @@ func (d *RelayConnections) storeMetrics() {
 
 	m := make(map[domain.RelayAddress]RelayConnectionState)
 	for _, connection := range d.connections {
+		rateLimitNoticeBackoffManager := d.getRateLimitNoticeBackoffManager(connection.Address())
+		d.metrics.ReportRateLimitBackoffMs(connection.Address(), rateLimitNoticeBackoffManager.GetBackoffMs())
 		m[connection.Address()] = connection.State()
 	}
 	d.metrics.ReportRelayConnectionsState(m)
+}
+func (r *RelayConnections) getRateLimitNoticeBackoffManager(relayAddress domain.RelayAddress) *RateLimitNoticeBackoffManager {
+	rateLimitNoticeBackoffManager, exists := r.rateLimitNoticeBackoffManagers[relayAddress.HostWithoutPort()]
+	if !exists {
+		rateLimitNoticeBackoffManager = NewRateLimitNoticeBackoffManager()
+		r.rateLimitNoticeBackoffManagers[relayAddress.HostWithoutPort()] = rateLimitNoticeBackoffManager
+	}
+
+	return rateLimitNoticeBackoffManager
 }
 
 // Notice that a single connection can serve multiple req. This can cause a too many concurrent requests error if not throttled.
@@ -110,11 +122,7 @@ func (r *RelayConnections) getConnection(relayAddress domain.RelayAddress) *Rela
 	// Sometimes different addreses can point to the same relay. Example is
 	// wss://feeds.nostr.band/video and wss://feeds.nostr.band/audio.  For these
 	// cases, we want to share the rate limit notice backoff manager.
-	rateLimitNoticeBackoffManager, exists := r.rateLimitNoticeBackoffManagers[relayAddress.HostWithoutPort()]
-	if !exists {
-		rateLimitNoticeBackoffManager = NewRateLimitNoticeBackoffManager()
-		r.rateLimitNoticeBackoffManagers[relayAddress.HostWithoutPort()] = rateLimitNoticeBackoffManager
-	}
+	rateLimitNoticeBackoffManager := r.getRateLimitNoticeBackoffManager(relayAddress)
 
 	connection := NewRelayConnection(factory, rateLimitNoticeBackoffManager, r.logger, r.metrics)
 	go connection.Run(r.longCtx)

@@ -40,8 +40,16 @@ const maxBackoffMs = 10000
 const secondsToDecreaseRateLimitNoticeCount = 60 * 5 // 5 minutes = 300 seconds
 
 func (r *RateLimitNoticeBackoffManager) Wait() {
+	backoffMs := r.GetBackoffMs()
+
+	if backoffMs > 0 {
+		time.Sleep(time.Duration(backoffMs) * time.Millisecond)
+	}
+}
+
+func (r *RateLimitNoticeBackoffManager) GetBackoffMs() int {
 	if !r.IsSet() {
-		return
+		return 0
 	}
 
 	backoffMs := int(math.Min(float64(maxBackoffMs), math.Pow(2, float64(r.rateLimitNoticeCount))*50))
@@ -52,9 +60,7 @@ func (r *RateLimitNoticeBackoffManager) Wait() {
 		r.updateLastBumpTime()
 	}
 
-	if backoffMs > 0 {
-		time.Sleep(time.Duration(backoffMs) * time.Millisecond)
-	}
+	return backoffMs
 }
 
 func (r *RateLimitNoticeBackoffManager) updateLastBumpTime() time.Time {

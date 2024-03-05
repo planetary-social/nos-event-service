@@ -253,6 +253,9 @@ func (m2 mockMetrics) ReportRelayConnectionsState(m map[domain.RelayAddress]rela
 func (m2 mockMetrics) ReportNumberOfSubscriptions(address domain.RelayAddress, n int) {
 }
 
+func (m2 mockMetrics) ReportRateLimitBackoffMs(address domain.RelayAddress, n int) {
+}
+
 func (m2 mockMetrics) ReportMessageReceived(address domain.RelayAddress, messageType relays.MessageType, err *error) {
 }
 

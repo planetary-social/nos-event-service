@@ -46,6 +46,7 @@ type Prometheus struct {
 	relayConnectionStateGauge               *prometheus.GaugeVec
 	receivedEventsCounter                   *prometheus.CounterVec
 	relayConnectionSubscriptionsGauge       *prometheus.GaugeVec
+	relayRateLimitBackoffMsGauge            *prometheus.GaugeVec
 	relayConnectionReceivedMessagesCounter  *prometheus.CounterVec
 	relayConnectionDisconnectionsCounter    *prometheus.CounterVec
 	storedRelayAddressesGauge               prometheus.Gauge
@@ -127,6 +128,13 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		},
 		[]string{labelAddress},
 	)
+	relayRateLimitBackoffMsGauge := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "relay_rate_limit_backoff_ms_gauge",
+			Help: "Rate limit wait in milliseconds.",
+		},
+		[]string{labelAddress},
+	)
 	relayConnectionReceivedMessagesCounter := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "relay_connection_received_messages_counter",
@@ -173,6 +181,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		relayConnectionStateGauge,
 		receivedEventsCounter,
 		relayConnectionSubscriptionsGauge,
+		relayRateLimitBackoffMsGauge,
 		relayConnectionReceivedMessagesCounter,
 		relayConnectionDisconnectionsCounter,
 		storedRelayAddressesGauge,
@@ -210,6 +219,7 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		relayConnectionStateGauge:               relayConnectionStateGauge,
 		receivedEventsCounter:                   receivedEventsCounter,
 		relayConnectionSubscriptionsGauge:       relayConnectionSubscriptionsGauge,
+		relayRateLimitBackoffMsGauge:            relayRateLimitBackoffMsGauge,
 		relayConnectionReceivedMessagesCounter:  relayConnectionReceivedMessagesCounter,
 		relayConnectionDisconnectionsCounter:    relayConnectionDisconnectionsCounter,
 		storedRelayAddressesGauge:               storedRelayAddressesGauge,
@@ -256,6 +266,12 @@ func (p *Prometheus) ReportQueueOldestMessageAge(topic string, age time.Duration
 
 func (p *Prometheus) ReportNumberOfSubscriptions(address domain.RelayAddress, n int) {
 	p.relayConnectionSubscriptionsGauge.With(prometheus.Labels{
+		labelAddress: address.String(),
+	}).Set(float64(n))
+}
+
+func (p *Prometheus) ReportRateLimitBackoffMs(address domain.RelayAddress, n int) {
+	p.relayRateLimitBackoffMsGauge.With(prometheus.Labels{
 		labelAddress: address.String(),
 	}).Set(float64(n))
 }
