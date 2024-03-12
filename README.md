@@ -1,5 +1,6 @@
 # Nos Event Service
 
+
 A service which crawls relays to replicate events relevant to Nos users which
 then get passed to other services e.g. the notification service or the
 moderation service.
@@ -18,6 +19,12 @@ a set of  bootstrap relays returned by
 
 The contacts are discovered by using the code located in
 [`ContactsExtractor`][contacts-extractor-search] to scan nostr events.
+
+![Image](https://github.com/planetary-social/nos-event-service/assets/18184/5af04679-d5a6-4897-b08c-3cea9ecc1795)
+
+### Interaction with the notifications service
+
+![Image](https://github.com/planetary-social/nos-event-service/assets/18184/c725b066-0f35-4e61-9a4b-94f820dfbc05)
 
 ### Internal sqlite pub sub
 
