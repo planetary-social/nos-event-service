@@ -26,7 +26,8 @@ var (
 	)
 )
 
-const sendEventToRelayTimeout = 6 * time.Second
+// const sendEventToRelayTimeout = 6 * time.Second
+const sendEventToRelayTimeout = 30 * time.Second
 
 type ProcessSavedEvent struct {
 	id domain.EventId

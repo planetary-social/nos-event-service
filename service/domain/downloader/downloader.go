@@ -178,6 +178,9 @@ func (d *Downloader) updateDownloaders(ctx context.Context) error {
 		return errors.Wrap(err, "error getting relays")
 	}
 
+	// Test if removing the relay for reads solves the timeout issue
+	relays.Delete(domain.MustNewRelayAddress("wss://relay.nos.social"))
+
 	d.relayDownloadersLock.Lock()
 	defer d.relayDownloadersLock.Unlock()
 

@@ -101,10 +101,17 @@ func (r *RelayConnection) Run(ctx context.Context) {
 
 		r.metrics.ReportRelayDisconnection(r.connectionFactory.Address(), err)
 
+		backoff := r.backoffManager.GetReconnectionBackoff(err)
+
+		// We control relay.nos.social, so we can be more aggressive with the backoff
+		if r.Address().String() == "wss://relay.nos.social" {
+			backoff = 1 * time.Minute
+		}
+
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(r.backoffManager.GetReconnectionBackoff(err)):
+		case <-time.After(backoff):
 			continue
 		}
 	}
@@ -150,7 +157,16 @@ func (r *RelayConnection) GetEvents(ctx context.Context, filter domain.Filter) (
 	return ch, nil
 }
 
-// pushes the event to the eventsToSend channel and blocks until a sendEventResponse is received
+// SendEvent schedules an event to be sent to the relay. It does so by creating
+// and adding an eventToSendRequest to the `eventsToSend` map, which manages
+// pending requests for each event. This approach prevents multiple requests for
+// sending the same event from being initiated. Each eventToSendRequest includes
+// a `ch` channel, which receives a sendEventResponse indicating the success or
+// failure of the send operation. This success signal is send to the ch channel
+// through the `passSendEventResponseToChannel` function after an OK message is
+// received. Additionally, the event is enqueued into `newEventsCh`, a channel
+// that is monitored by a loop within `sendEvents`, to manage the actual
+// transmission of the event to the relay.
 func (r *RelayConnection) SendEvent(ctx context.Context, event domain.Event) error {
 	ctx, cancel := context.WithTimeout(ctx, sendEventTimeout)
 	defer cancel()
@@ -303,6 +319,7 @@ func (r *RelayConnection) run(ctx context.Context) error {
 	}()
 
 	go func() {
+		// Loops through newEventsCh and sends events to the relay
 		if err := r.sendEvents(ctx, conn); err != nil {
 			if !r.writeErrorShouldNotBeLogged(err) {
 				r.logger.Error().
