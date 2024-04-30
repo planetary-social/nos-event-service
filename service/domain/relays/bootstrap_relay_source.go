@@ -8,14 +8,12 @@ import (
 )
 
 var bootstrapRelayAddresses = []domain.RelayAddress{
-	domain.MustNewRelayAddress("wss://relay.nostr.band"),
 	domain.MustNewRelayAddress("wss://relay.damus.io"),
 	domain.MustNewRelayAddress("wss://nos.lol"),
 	domain.MustNewRelayAddress("wss://e.nos.lol"),
 	domain.MustNewRelayAddress("wss://purplepag.es"),
 	domain.MustNewRelayAddress("wss://relay.current.fyi"),
-	domain.MustNewRelayAddress("wss://relay.nos.social"),
-	domain.MustNewRelayAddress("wss://relayable.org"),
+	domain.MustNewRelayAddress("wss://brb.io"),
 	domain.MustNewRelayAddress("wss://relay.snort.social"),
 }
 

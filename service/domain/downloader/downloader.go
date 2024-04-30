@@ -3,6 +3,7 @@ package downloader
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,11 @@ const (
 
 	refreshKnownRelaysEvery = 1 * time.Minute
 )
+
+var relaySuffixesToSkip = []string{
+	"relay.nos.social",
+	"nostr.band",
+}
 
 var (
 	globalEventKindsToDownload = []domain.EventKind{
@@ -178,9 +184,6 @@ func (d *Downloader) updateDownloaders(ctx context.Context) error {
 		return errors.Wrap(err, "error getting relays")
 	}
 
-	// Test if removing the relay for reads solves the timeout issue
-	relays.Delete(domain.MustNewRelayAddress("wss://relay.nos.social"))
-
 	d.relayDownloadersLock.Lock()
 	defer d.relayDownloadersLock.Unlock()
 
@@ -198,6 +201,7 @@ func (d *Downloader) updateDownloaders(ctx context.Context) error {
 
 	for _, relayAddress := range relays.List() {
 		if _, ok := d.relayDownloaders[relayAddress]; !ok {
+
 			d.logger.
 				Trace().
 				WithField("address", relayAddress.String()).
@@ -224,7 +228,8 @@ func (d *Downloader) updateDownloaders(ctx context.Context) error {
 	return nil
 }
 
-// Get the bootstrap relays and those already in the database.
+// Get the bootstrap relays and those already in the database skipping those in
+// relaySuffixesToSkip.
 func (d *Downloader) getRelays(ctx context.Context) (*internal.Set[domain.RelayAddress], error) {
 	result := internal.NewEmptySet[domain.RelayAddress]()
 
@@ -238,9 +243,38 @@ func (d *Downloader) getRelays(ctx context.Context) (*internal.Set[domain.RelayA
 	if err != nil {
 		return nil, errors.Wrap(err, "error getting relays")
 	}
-	result.PutMany(databaseRelays)
+
+	filteredDatabaseRelays := filter(databaseRelays, func(s domain.RelayAddress) bool {
+		return endsWithAny(s.HostWithoutPort(), relaySuffixesToSkip)
+	})
+
+	result.PutMany(filteredDatabaseRelays)
 
 	return result, nil
+}
+
+// filter applies a predicate function to each element in the input slice and
+// returns a new slice containing only elements that do not satisfy the
+// predicate.
+func filter[T any](slice []T, predicate func(T) bool) []T {
+	var result []T
+	for _, item := range slice {
+		if !predicate(item) {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+// endsWithAny checks if the given string ends with any of the strings in the
+// list.
+func endsWithAny(s string, list []string) bool {
+	for _, suffix := range list {
+		if strings.HasSuffix(s, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 type runningRelayDownloader struct {
