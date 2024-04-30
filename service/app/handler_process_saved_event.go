@@ -176,20 +176,20 @@ func (h *ProcessSavedEventHandler) maybeSendEventToRelay(ctx context.Context, ev
 	defer cancel()
 
 	if !ShouldSendEventToRelay(event) {
-		h.metrics.ReportEventSentToRelay(nosRelayAddress, SendEventToRelayDecisionIgnore, SendEventToRelayResultSuccess)
+		//h.metrics.ReportEventSentToRelay(nosRelayAddress, SendEventToRelayDecisionIgnore, SendEventToRelayResultSuccess)
 		return nil
 	}
 
 	if err := h.eventSender.SendEvent(ctx, nosRelayAddress, event); err != nil {
 		if h.shouldDisregardSendEventErr(err) {
-			h.metrics.ReportEventSentToRelay(nosRelayAddress, SendEventToRelayDecisionSend, SendEventToRelayResultIgnoreError)
+			//h.metrics.ReportEventSentToRelay(nosRelayAddress, SendEventToRelayDecisionSend, SendEventToRelayResultIgnoreError)
 			return nil
 		}
-		h.metrics.ReportEventSentToRelay(nosRelayAddress, SendEventToRelayDecisionSend, SendEventToRelayResultError)
+		//h.metrics.ReportEventSentToRelay(nosRelayAddress, SendEventToRelayDecisionSend, SendEventToRelayResultError)
 		return errors.Wrap(err, "error sending event to relay")
 	}
 
-	h.metrics.ReportEventSentToRelay(nosRelayAddress, SendEventToRelayDecisionSend, SendEventToRelayResultSuccess)
+	//h.metrics.ReportEventSentToRelay(nosRelayAddress, SendEventToRelayDecisionSend, SendEventToRelayResultSuccess)
 	return nil
 }
 
