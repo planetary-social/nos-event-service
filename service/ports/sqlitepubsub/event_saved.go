@@ -3,6 +3,8 @@ package sqlitepubsub
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"time"
 
 	"github.com/boreq/errors"
 	"github.com/planetary-social/nos-event-service/internal/logging"
@@ -11,8 +13,12 @@ import (
 	"github.com/planetary-social/nos-event-service/service/domain"
 )
 
+const backPressureThreshold = 20000
+
 type ProcessSavedEventHandler interface {
 	Handle(ctx context.Context, cmd app.ProcessSavedEvent) (err error)
+	NotifyBackPressure()
+	ResolveBackPressure()
 }
 
 type EventSavedEventSubscriber struct {
@@ -36,6 +42,34 @@ func NewEventSavedEventSubscriber(
 	}
 }
 func (s *EventSavedEventSubscriber) Run(ctx context.Context) error {
+
+	//Periodically check for backpressure, if detected, send signal to sql queue
+	//publisher to disconnect from relays for a while
+	go func() {
+		for {
+			queueSize, err := s.subscriber.EventSavedQueueLength(ctx)
+			if err != nil {
+				s.logger.Error().WithError(err).Message("error getting queue length")
+			}
+
+			if queueSize > backPressureThreshold {
+				s.logger.Debug().Message(
+					fmt.Sprintf("Queue size %d > %d. Sending backpressure signal to slow down", queueSize, backPressureThreshold),
+				)
+				s.handler.NotifyBackPressure()
+			} else if queueSize < backPressureThreshold/2 {
+				s.handler.ResolveBackPressure()
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(30 * time.Second):
+				continue
+			}
+		}
+	}()
+
 	for msg := range s.subscriber.SubscribeToEventSaved(ctx) {
 		if err := s.handleMessage(ctx, msg); err != nil {
 			s.logger.Error().WithError(err).Message("error handling a message")

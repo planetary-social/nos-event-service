@@ -70,6 +70,8 @@ type RelayConnection struct {
 	eventsToSendMutex             sync.Mutex
 	newEventsCh                   chan domain.Event
 	rateLimitNoticeBackoffManager *RateLimitNoticeBackoffManager
+	cancelRun                     context.CancelFunc
+	cancelBackPressure            context.CancelFunc
 }
 
 func NewRelayConnection(
@@ -89,6 +91,8 @@ func NewRelayConnection(
 		eventsToSend:                  make(map[domain.EventId]*eventToSend),
 		newEventsCh:                   make(chan domain.Event),
 		rateLimitNoticeBackoffManager: rateLimitNoticeBackoffManager,
+		cancelRun:                     nil,
+		cancelBackPressure:            nil,
 	}
 }
 
@@ -103,9 +107,13 @@ func (r *RelayConnection) Run(ctx context.Context) {
 
 		backoff := r.backoffManager.GetReconnectionBackoff(err)
 
-		// We control relay.nos.social, so we can be more aggressive with the backoff
-		if r.Address().String() == "wss://relay.nos.social" {
-			backoff = 1 * time.Minute
+		if r.Address().HostWithoutPort() == "relay.nos.social" {
+			// We control relay.nos.social, so we don't backoff here
+			backoff = 0
+		} else if errors.Is(err, BackPressureError) {
+			// Only calling r.cancelBackPressure() can resolve the backpressure
+			r.WaitUntilNoBackPressure(ctx)
+			backoff = 0
 		}
 
 		select {
@@ -115,6 +123,20 @@ func (r *RelayConnection) Run(ctx context.Context) {
 			continue
 		}
 	}
+}
+
+func (r *RelayConnection) WaitUntilNoBackPressure(ctx context.Context) {
+	var resolvedBackPressureCtx context.Context
+	var cancelBackPressure context.CancelFunc
+
+	r.setStateWithFn(RelayConnectionStateBackPressured, func() {
+		resolvedBackPressureCtx, cancelBackPressure = context.WithCancel(ctx)
+		r.cancelBackPressure = cancelBackPressure
+	})
+
+	<-resolvedBackPressureCtx.Done()
+
+	r.setState(RelayConnectionStateDisconnected)
 }
 
 func (r *RelayConnection) State() RelayConnectionState {
@@ -289,6 +311,8 @@ func (r *RelayConnection) triggerSubscriptionUpdate() {
 
 func (r *RelayConnection) run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
+	backPressureCtx, cancelFromBackPressure := context.WithCancel(ctx)
+	r.cancelRun = cancelFromBackPressure
 	defer cancel()
 
 	defer r.setState(RelayConnectionStateDisconnected)
@@ -333,6 +357,19 @@ func (r *RelayConnection) run(ctx context.Context) error {
 		messageBytes, err := conn.ReadMessage()
 		if err != nil {
 			return NewReadMessageError(err)
+		}
+
+		select {
+		case <-backPressureCtx.Done():
+			// The backpressure handling code is to avoid overwhelming the queue
+			// that writes to relay.nos.social so we skip that signal for it or
+			// the queue will never shrink
+			if r.Address().HostWithoutPort() == "relay.nos.social" {
+				continue
+			}
+
+			return BackPressureError
+		default:
 		}
 
 		if err := r.handleMessage(messageBytes); err != nil {
@@ -585,7 +622,16 @@ func (r *RelayConnection) passSendEventResponseToChannel(eventID domain.EventId,
 func (r *RelayConnection) setState(state RelayConnectionState) {
 	r.stateMutex.Lock()
 	defer r.stateMutex.Unlock()
+
 	r.state = state
+}
+
+func (r *RelayConnection) setStateWithFn(state RelayConnectionState, fn func()) {
+	r.stateMutex.Lock()
+	defer r.stateMutex.Unlock()
+
+	r.state = state
+	fn()
 }
 
 func (r *RelayConnection) manageSubs(ctx context.Context, conn Connection) error {
@@ -730,6 +776,8 @@ func (t DialError) Is(target error) bool {
 	_, ok2 := target.(*DialError)
 	return ok1 || ok2
 }
+
+var BackPressureError = errors.New("backpressure error")
 
 type ReadMessageError struct {
 	underlying error

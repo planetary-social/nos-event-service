@@ -94,9 +94,17 @@ func (h *ProcessSavedEventHandler) Handle(ctx context.Context, cmd ProcessSavedE
 	return nil
 }
 
+func (h *ProcessSavedEventHandler) NotifyBackPressure() {
+	h.eventSender.NotifyBackPressure()
+}
+
+func (h *ProcessSavedEventHandler) ResolveBackPressure() {
+	h.eventSender.ResolveBackPressure()
+}
+
 func (h *ProcessSavedEventHandler) loadEvent(ctx context.Context, eventId domain.EventId) (domain.Event, error) {
 	var event domain.Event
-	if err := h.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
+	if err := h.transactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters Adapters) error {
 		tmp, err := adapters.Events.Get(ctx, eventId)
 		if err != nil {
 			return errors.Wrap(err, "error loading the event")

@@ -63,7 +63,7 @@ func TestRelayRepository_ItIsPossibleToListSavedData(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		addresses, err := adapters.RelayRepository.List(ctx)
 		require.NoError(t, err)
 		require.Len(t, addresses, 1)
@@ -81,7 +81,7 @@ func TestRelayRepository_ItIsPossibleToListSavedData(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		addresses, err := adapters.RelayRepository.List(ctx)
 		require.NoError(t, err)
 		require.Len(t, addresses, 2)
@@ -116,7 +116,7 @@ func TestRelayRepository_SavingSameDataTwiceDoesNotCreateDuplicates(t *testing.T
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		addresses, err := adapters.RelayRepository.List(ctx)
 		require.NoError(t, err)
 		require.Len(t, addresses, 1)
@@ -134,7 +134,7 @@ func TestRelayRepository_SavingSameDataTwiceDoesNotCreateDuplicates(t *testing.T
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		addresses, err := adapters.RelayRepository.List(ctx)
 		require.NoError(t, err)
 		require.Len(t, addresses, 1)
@@ -161,7 +161,7 @@ func TestRelayRepository_CountCountsSavedAddresses(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		n, err := adapters.RelayRepository.Count(ctx)
 		require.NoError(t, err)
 		require.Equal(t, 0, n)
@@ -178,7 +178,7 @@ func TestRelayRepository_CountCountsSavedAddresses(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		n, err := adapters.RelayRepository.Count(ctx)
 		require.NoError(t, err)
 		require.Equal(t, 1, n)
@@ -195,7 +195,7 @@ func TestRelayRepository_CountCountsSavedAddresses(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		n, err := adapters.RelayRepository.Count(ctx)
 		require.NoError(t, err)
 		require.Equal(t, 2, n)

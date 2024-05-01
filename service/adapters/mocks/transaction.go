@@ -19,3 +19,7 @@ func NewTransactionProvider(adapters app.Adapters) *TransactionProvider {
 func (t TransactionProvider) Transact(ctx context.Context, f func(context.Context, app.Adapters) error) error {
 	return f(ctx, t.adapters)
 }
+
+func (t TransactionProvider) ReadOnly(ctx context.Context, f func(context.Context, app.Adapters) error) error {
+	return f(ctx, t.adapters)
+}

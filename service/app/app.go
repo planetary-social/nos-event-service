@@ -20,6 +20,7 @@ const (
 
 type TransactionProvider interface {
 	Transact(context.Context, func(context.Context, Adapters) error) error
+	ReadOnly(context.Context, func(context.Context, Adapters) error) error
 }
 
 type Adapters struct {
@@ -143,6 +144,8 @@ type Subscriber interface {
 type EventSender interface {
 	// SendEvent returns relays.ErrEventReplaced.
 	SendEvent(ctx context.Context, relayAddress domain.RelayAddress, event domain.Event) error
+	NotifyBackPressure()
+	ResolveBackPressure()
 }
 
 var (

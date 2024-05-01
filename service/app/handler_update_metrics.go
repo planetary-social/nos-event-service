@@ -51,7 +51,7 @@ func (h *UpdateMetricsHandler) Handle(ctx context.Context) (err error) {
 		h.metrics.ReportQueueOldestMessageAge("eventSaved", age)
 	}
 
-	if err := h.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
+	if err := h.transactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters Adapters) error {
 		n, err := adapters.Relays.Count(ctx)
 		if err != nil {
 			return errors.Wrap(err, "error counting relay addresses")
