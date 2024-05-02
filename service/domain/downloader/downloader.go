@@ -22,7 +22,11 @@ const (
 
 var relaySuffixesToSkip = []string{
 	"relay.nos.social",
+	"127.0.0.1",
+	"localhost",
 	"nostr.band",
+	"nostrja-kari-nip50.heguro.com",
+	"nostr.sebastix.social",
 }
 
 var (

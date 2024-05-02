@@ -18,7 +18,7 @@ func TestEventRepository_GetReturnsPredefinedError(t *testing.T) {
 	ctx := fixtures.TestContext(t)
 	adapters := NewTestAdapters(ctx, t)
 
-	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err := adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		_, err := adapters.EventRepository.Get(ctx, fixtures.SomeEventID())
 		require.ErrorIs(t, err, app.ErrEventNotFound)
 
@@ -64,7 +64,7 @@ func TestEventRepository_ItIsPossibleToSaveAndGetEvents(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		readEvent, err := adapters.EventRepository.Get(ctx, event.Id())
 		require.NoError(t, err)
 		require.Equal(t, event.Raw(), readEvent.Raw())
@@ -78,7 +78,7 @@ func TestEventRepository_CountCountsSavedEvents(t *testing.T) {
 	ctx := fixtures.TestContext(t)
 	adapters := NewTestAdapters(ctx, t)
 
-	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err := adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		n, err := adapters.EventRepository.Count(ctx)
 		require.NoError(t, err)
 		require.Equal(t, 0, n)
@@ -96,7 +96,7 @@ func TestEventRepository_CountCountsSavedEvents(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 			n, err := adapters.EventRepository.Count(ctx)
 			require.NoError(t, err)
 			require.Equal(t, i+1, n)
@@ -114,7 +114,7 @@ func TestEventRepository_ExistsChecksIfEventsExist(t *testing.T) {
 	event1 := fixtures.SomeEvent()
 	event2 := fixtures.SomeEvent()
 
-	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err := adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		ok, err := adapters.EventRepository.Exists(ctx, event1.Id())
 		require.NoError(t, err)
 		require.False(t, ok)
@@ -135,7 +135,7 @@ func TestEventRepository_ExistsChecksIfEventsExist(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		ok, err := adapters.EventRepository.Exists(ctx, event1.Id())
 		require.NoError(t, err)
 		require.True(t, ok)
@@ -153,7 +153,7 @@ func TestEventRepository_ListReturnsNoEventsIfRepositoryIsEmpty(t *testing.T) {
 	ctx := fixtures.TestContext(t)
 	adapters := NewTestAdapters(ctx, t)
 
-	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err := adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		events, err := adapters.EventRepository.List(ctx, nil, 10)
 		require.NoError(t, err)
 		require.Empty(t, events)
@@ -185,7 +185,7 @@ func TestEventRepository_ListReturnsEventsIfRepositoryIsNotEmpty(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		events, err := adapters.EventRepository.List(ctx, nil, 2)
 		require.NoError(t, err)
 		fixtures.RequireEqualEventSlices(t,

@@ -27,6 +27,14 @@ func (s *EventSender) SendEvent(ctx context.Context, address domain.RelayAddress
 	return nil
 }
 
+func (s *EventSender) NotifyBackPressure() {
+	s.connections.NotifyBackPressure()
+}
+
+func (s *EventSender) ResolveBackPressure() {
+	s.connections.ResolveBackPressure()
+}
+
 func (s *EventSender) maybeConvertError(err error) error {
 	var okResponseErr OKResponseError
 	if !errors.As(err, &okResponseErr) {

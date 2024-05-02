@@ -18,7 +18,7 @@ func TestPublicKeysToMonitorRepository_GetReturnsPredefinedError(t *testing.T) {
 	ctx := fixtures.TestContext(t)
 	adapters := NewTestAdapters(ctx, t)
 
-	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err := adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		_, err := adapters.PublicKeysToMonitorRepository.Get(ctx, fixtures.SomePublicKey())
 		require.ErrorIs(t, err, app.ErrPublicKeyToMonitorNotFound)
 
@@ -31,7 +31,7 @@ func TestPublicKeysToMonitorRepository_ListReturnsNoDataWhenRepositoryIsEmpty(t 
 	ctx := fixtures.TestContext(t)
 	adapters := NewTestAdapters(ctx, t)
 
-	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err := adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		result, err := adapters.PublicKeysToMonitorRepository.List(ctx)
 		require.NoError(t, err)
 		require.Empty(t, result)
@@ -57,7 +57,7 @@ func TestPublicKeysToMonitorRepository_GetReturnsData(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		result, err := adapters.PublicKeysToMonitorRepository.Get(ctx, publicKey)
 		require.NoError(t, err)
 
@@ -97,7 +97,7 @@ func TestPublicKeysToMonitorRepository_SaveUpdatesData(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		result, err := adapters.PublicKeysToMonitorRepository.List(ctx)
 		require.NoError(t, err)
 
@@ -123,7 +123,7 @@ func TestPublicKeysToMonitorRepository_SaveUpdatesData(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		result, err := adapters.PublicKeysToMonitorRepository.List(ctx)
 		require.NoError(t, err)
 

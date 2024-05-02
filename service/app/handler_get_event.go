@@ -40,7 +40,7 @@ func (h *GetEventHandler) Handle(ctx context.Context, cmd GetEvent) (event domai
 	ctx, cancel := context.WithTimeout(ctx, applicationHandlerTimeout)
 	defer cancel()
 
-	if err := h.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
+	if err := h.transactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters Adapters) error {
 		tmp, err := adapters.Events.Get(ctx, cmd.id)
 		if err != nil {
 			return errors.Wrap(err, "error getting the event")

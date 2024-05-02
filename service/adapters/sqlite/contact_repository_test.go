@@ -18,7 +18,7 @@ func TestContactRepository_GetCurrentContactsEventReturnsPredefinedError(t *test
 	ctx := fixtures.TestContext(t)
 	adapters := NewTestAdapters(ctx, t)
 
-	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err := adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		_, err := adapters.ContactRepository.GetCurrentContactsEvent(ctx, fixtures.SomePublicKey())
 		require.ErrorIs(t, err, app.ErrNoContactsEvent)
 
@@ -31,7 +31,7 @@ func TestContactRepository_GetFollowwesReturnsEmptyListWhenThereIsNoData(t *test
 	ctx := fixtures.TestContext(t)
 	adapters := NewTestAdapters(ctx, t)
 
-	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err := adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		result, err := adapters.ContactRepository.GetFollowees(ctx, fixtures.SomePublicKey())
 		require.NoError(t, err)
 		require.Empty(t, result)
@@ -87,7 +87,7 @@ func TestContactRepository_ContactsAreReplacedForGivenPublicKey(t *testing.T) {
 		return strings.Compare(a.Hex(), b.Hex())
 	}
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		current1, err := adapters.ContactRepository.GetCurrentContactsEvent(ctx, pk1)
 		require.NoError(t, err)
 		require.Equal(t, event1.Id(), current1.Id())
@@ -132,7 +132,7 @@ func TestContactRepository_ContactsAreReplacedForGivenPublicKey(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		current1, err := adapters.ContactRepository.GetCurrentContactsEvent(ctx, pk1)
 		require.NoError(t, err)
 		require.Equal(t, event1.Id(), current1.Id())
@@ -195,7 +195,7 @@ func TestContactRepository_GrabbingAnEventForFolloweesMeansTheyAreInPublicKeysBu
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		currentFollowerEvent, err := adapters.ContactRepository.GetCurrentContactsEvent(ctx, pk1)
 		require.NoError(t, err)
 		require.Equal(t, event.Id(), currentFollowerEvent.Id())
@@ -251,7 +251,7 @@ func TestContactRepository_IsFolloweeOfMonitoredPublicKey(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		ok, err := adapters.ContactRepository.IsFolloweeOfMonitoredPublicKey(ctx, followee11)
 		require.NoError(t, err)
 		require.True(t, ok)
@@ -314,7 +314,7 @@ func BenchmarkContactRepository_GetCurrentContactsEvent(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 			event, err := adapters.ContactRepository.GetCurrentContactsEvent(ctx, eventToLookUp.PubKey())
 			require.NoError(b, err)
 			require.Equal(b, eventToLookUp.Id(), event.Id())
@@ -337,7 +337,7 @@ func TestContactRepository_CountFolloweesReturnsNumberOfFollowees(t *testing.T) 
 	pk2, sk2 := fixtures.SomeKeyPair()
 	event2 := fixtures.SomeEventWithAuthor(sk2)
 
-	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err := adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		n, err := adapters.ContactRepository.CountFollowees(ctx, pk1)
 		require.NoError(t, err)
 		require.Equal(t, 0, n)
@@ -364,7 +364,7 @@ func TestContactRepository_CountFolloweesReturnsNumberOfFollowees(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		n, err := adapters.ContactRepository.CountFollowees(ctx, pk1)
 		require.NoError(t, err)
 		require.Equal(t, 2, n)
@@ -392,7 +392,7 @@ func TestContactRepository_CountFollowersReturnsNumberOfFollowers(t *testing.T) 
 	followee2 := fixtures.SomePublicKey()
 	followee3 := fixtures.SomePublicKey()
 
-	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err := adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		n, err := adapters.ContactRepository.CountFollowers(ctx, followee1)
 		require.NoError(t, err)
 		require.Equal(t, 0, n)
@@ -426,7 +426,7 @@ func TestContactRepository_CountFollowersReturnsNumberOfFollowers(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
 		n, err := adapters.ContactRepository.CountFollowers(ctx, followee1)
 		require.NoError(t, err)
 		require.Equal(t, 1, n)

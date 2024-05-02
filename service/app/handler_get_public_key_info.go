@@ -59,7 +59,7 @@ func (h *GetPublicKeyInfoHandler) Handle(ctx context.Context, cmd GetPublicKeyIn
 
 	var followeesCount, followersCount int
 
-	if err := h.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
+	if err := h.transactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters Adapters) error {
 		tmp, err := adapters.Contacts.CountFollowees(ctx, cmd.publicKey)
 		if err != nil {
 			return errors.Wrap(err, "error counting followees")

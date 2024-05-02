@@ -28,6 +28,7 @@ var ErrQueueEmpty = errors.New("queue is empty")
 
 type PubsubTransactionProvider interface {
 	Transact(context.Context, func(context.Context, *sql.Tx) error) error
+	ReadOnly(context.Context, func(context.Context, *sql.Tx) error) error
 }
 
 type Message struct {
@@ -152,7 +153,7 @@ func (p *PubSub) Subscribe(ctx context.Context, topic string) <-chan *ReceivedMe
 
 func (p *PubSub) QueueLength(ctx context.Context, topic string) (int, error) {
 	var count int
-	if err := p.transactionProvider.Transact(ctx, func(ctx context.Context, tx *sql.Tx) error {
+	if err := p.transactionProvider.ReadOnly(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		row := tx.QueryRow(
 			"SELECT COUNT(*) FROM pubsub WHERE topic = ?",
 			topic,
@@ -175,7 +176,7 @@ func (p *PubSub) QueueLength(ctx context.Context, topic string) (int, error) {
 // OldestMessageAge returns ErrQueueEmpty if the queue is empty.
 func (p *PubSub) OldestMessageAge(ctx context.Context, topic string) (time.Duration, error) {
 	var age time.Duration
-	if err := p.transactionProvider.Transact(ctx, func(ctx context.Context, tx *sql.Tx) error {
+	if err := p.transactionProvider.ReadOnly(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		row := tx.QueryRow(
 			"SELECT created_at FROM pubsub WHERE topic = ? ORDER BY created_at ASC LIMIT 1",
 			topic,
@@ -256,7 +257,7 @@ func (p *PubSub) subscribe(ctx context.Context, topic string, ch chan *ReceivedM
 
 func (p *PubSub) readMsg(ctx context.Context, topic string) (Message, error) {
 	var msg Message
-	if err := p.transactionProvider.Transact(ctx, func(ctx context.Context, tx *sql.Tx) error {
+	if err := p.transactionProvider.ReadOnly(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		row := tx.QueryRow(
 			"SELECT uuid, payload FROM pubsub WHERE topic = ? AND (backoff_until IS NULL OR backoff_until <= ?) ORDER BY RANDOM() LIMIT 1",
 			topic,

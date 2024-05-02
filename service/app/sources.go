@@ -32,7 +32,7 @@ func (m *DatabaseRelaySource) GetRelays(ctx context.Context) ([]domain.RelayAddr
 	}()
 
 	var maybeResult []domain.MaybeRelayAddress
-	if err := m.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
+	if err := m.transactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters Adapters) error {
 		tmp, err := adapters.Relays.List(ctx)
 		if err != nil {
 			return errors.Wrap(err, "error listing relays")
@@ -86,7 +86,7 @@ func (d *DatabasePublicKeySource) GetPublicKeys(ctx context.Context) (downloader
 	publicKeysToMonitor := *internal.NewEmptySet[domain.PublicKey]()
 	publicKeysToMonitorFollowees := *internal.NewEmptySet[domain.PublicKey]()
 
-	if err := d.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
+	if err := d.transactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters Adapters) error {
 		values, err := adapters.PublicKeysToMonitor.List(ctx)
 		if err != nil {
 			return errors.Wrap(err, "error getting public keys to monitor")

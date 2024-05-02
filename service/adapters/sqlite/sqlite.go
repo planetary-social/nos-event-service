@@ -96,7 +96,12 @@ type GenericTransactionProvider[T any] struct {
 
 func (t *GenericTransactionProvider[T]) Transact(ctx context.Context, fn func(context.Context, T) error) error {
 	transactionFunc := t.makeTransactionFunc(fn)
-	return t.runner.TryRun(ctx, transactionFunc)
+	return t.runner.TryRun(ctx, transactionFunc, false)
+}
+
+func (t *GenericTransactionProvider[T]) ReadOnly(ctx context.Context, fn func(context.Context, T) error) error {
+	transactionFunc := t.makeTransactionFunc(fn)
+	return t.runner.TryRun(ctx, transactionFunc, true)
 }
 
 func (t *GenericTransactionProvider[T]) makeTransactionFunc(fn func(context.Context, T) error) TransactionFunc {
@@ -128,11 +133,11 @@ func NewTransactionRunner(db *sql.DB) *TransactionRunner {
 	}
 }
 
-func (t *TransactionRunner) TryRun(ctx context.Context, fn TransactionFunc) error {
+func (t *TransactionRunner) TryRun(ctx context.Context, fn TransactionFunc, readOnly bool) error {
 	resultCh := make(chan error)
 
 	select {
-	case t.chIn <- newTransactionTask(ctx, fn, resultCh):
+	case t.chIn <- newTransactionTask(ctx, fn, resultCh, readOnly):
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -150,7 +155,7 @@ func (t *TransactionRunner) Run(ctx context.Context) error {
 		select {
 		case task := <-t.chIn:
 			select {
-			case task.ResultCh <- t.run(task.Ctx, task.Fn):
+			case task.ResultCh <- t.run(task.Ctx, task.Fn, task.readOnly):
 				continue
 			case <-task.Ctx.Done():
 				continue
@@ -163,8 +168,15 @@ func (t *TransactionRunner) Run(ctx context.Context) error {
 	}
 }
 
-func (t *TransactionRunner) run(ctx context.Context, fn TransactionFunc) error {
-	tx, err := t.db.BeginTx(ctx, nil)
+func (t *TransactionRunner) run(ctx context.Context, fn TransactionFunc, readOnly bool) error {
+	var opts sql.TxOptions
+	if readOnly {
+		opts = sql.TxOptions{ReadOnly: true}
+	} else {
+		opts = sql.TxOptions{Isolation: sql.LevelSerializable}
+	}
+
+	tx, err := t.db.BeginTx(ctx, &opts)
 	if err != nil {
 		return errors.Wrap(err, "error starting the transaction")
 	}
@@ -187,8 +199,9 @@ type transactionTask struct {
 	Ctx      context.Context
 	Fn       TransactionFunc
 	ResultCh chan<- error
+	readOnly bool
 }
 
-func newTransactionTask(ctx context.Context, fn TransactionFunc, resultCh chan<- error) transactionTask {
-	return transactionTask{Ctx: ctx, Fn: fn, ResultCh: resultCh}
+func newTransactionTask(ctx context.Context, fn TransactionFunc, resultCh chan<- error, readOnly bool) transactionTask {
+	return transactionTask{Ctx: ctx, Fn: fn, ResultCh: resultCh, readOnly: readOnly}
 }

@@ -74,6 +74,24 @@ func (d *RelayConnections) SendEvent(ctx context.Context, relayAddress domain.Re
 	return connection.SendEvent(ctx, event)
 }
 
+func (d *RelayConnections) NotifyBackPressure() {
+	for _, connection := range d.connections {
+		if connection.cancelRun != nil && connection.Address().HostWithoutPort() != "relay.nos.social" {
+			connection.cancelRun()
+			connection.cancelRun = nil
+		}
+	}
+}
+
+func (d *RelayConnections) ResolveBackPressure() {
+	for _, connection := range d.connections {
+		if connection.cancelBackPressure != nil {
+			connection.cancelBackPressure()
+			connection.cancelBackPressure = nil
+		}
+	}
+}
+
 func (d *RelayConnections) storeMetricsLoop(ctx context.Context) {
 	for {
 		d.storeMetrics()
