@@ -366,7 +366,6 @@ func (r *RelayConnection) run(ctx context.Context) error {
 				WithError(err).
 				WithField("message", string(messageBytes)).
 				Message("error handling an incoming message")
-			continue
 		}
 	}
 }
