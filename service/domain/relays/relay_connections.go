@@ -76,9 +76,8 @@ func (d *RelayConnections) SendEvent(ctx context.Context, relayAddress domain.Re
 
 func (d *RelayConnections) NotifyBackPressure() {
 	for _, connection := range d.connections {
-		if connection.cancelRun != nil && connection.Address().HostWithoutPort() != "relay.nos.social" {
-			connection.cancelRun()
-			connection.cancelRun = nil
+		if connection.Address().HostWithoutPort() != "relay.nos.social" {
+			connection.setState(RelayConnectionStateBackPressured)
 		}
 	}
 }
