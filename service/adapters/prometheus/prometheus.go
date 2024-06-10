@@ -237,9 +237,7 @@ func (p *Prometheus) StartApplicationCall(handlerName string) app.ApplicationCal
 }
 
 func (p *Prometheus) ReportNumberOfRelayDownloaders(n int) {
-	go func() {
-		p.relayDownloadersGauge.Set(float64(n))
-	}()
+	go p.relayDownloadersGauge.Set(float64(n))
 }
 
 func (p *Prometheus) ReportRelayConnectionsState(m map[domain.RelayAddress]relays.RelayConnectionState) {
@@ -257,37 +255,27 @@ func (p *Prometheus) ReportRelayConnectionsState(m map[domain.RelayAddress]relay
 }
 
 func (p *Prometheus) ReportReceivedEvent(address domain.RelayAddress) {
-	go func() {
-		p.receivedEventsCounter.With(prometheus.Labels{labelAddress: address.String()}).Inc()
-	}()
+	go p.receivedEventsCounter.With(prometheus.Labels{labelAddress: address.String()}).Inc()
 }
 
 func (p *Prometheus) ReportQueueLength(topic string, n int) {
-	go func() {
-		p.subscriptionQueueLengthGauge.With(prometheus.Labels{labelTopic: topic}).Set(float64(n))
-	}()
+	go p.subscriptionQueueLengthGauge.With(prometheus.Labels{labelTopic: topic}).Set(float64(n))
 }
 
 func (p *Prometheus) ReportQueueOldestMessageAge(topic string, age time.Duration) {
-	go func() {
-		p.subscriptionQueueOldestMessageAgeGauge.With(prometheus.Labels{labelTopic: topic}).Set(age.Seconds())
-	}()
+	go p.subscriptionQueueOldestMessageAgeGauge.With(prometheus.Labels{labelTopic: topic}).Set(age.Seconds())
 }
 
 func (p *Prometheus) ReportNumberOfSubscriptions(address domain.RelayAddress, n int) {
-	go func() {
-		p.relayConnectionSubscriptionsGauge.With(prometheus.Labels{
-			labelAddress: address.String(),
-		}).Set(float64(n))
-	}()
+	go p.relayConnectionSubscriptionsGauge.With(prometheus.Labels{
+		labelAddress: address.String(),
+	}).Set(float64(n))
 }
 
 func (p *Prometheus) ReportRateLimitBackoffMs(address domain.RelayAddress, n int) {
-	go func() {
-		p.relayRateLimitBackoffMsGauge.With(prometheus.Labels{
-			labelAddress: address.HostWithoutPort(),
-		}).Set(float64(n))
-	}()
+	go p.relayRateLimitBackoffMsGauge.With(prometheus.Labels{
+		labelAddress: address.HostWithoutPort(),
+	}).Set(float64(n))
 }
 
 func (p *Prometheus) ReportMessageReceived(address domain.RelayAddress, messageType relays.MessageType, err *error) {
@@ -296,49 +284,37 @@ func (p *Prometheus) ReportMessageReceived(address domain.RelayAddress, messageT
 		labelMessageType: messageType.String(),
 	}
 	setResultLabel(labels, err)
-	go func() {
-		p.relayConnectionReceivedMessagesCounter.With(labels).Inc()
-	}()
+	go p.relayConnectionReceivedMessagesCounter.With(labels).Inc()
 }
 
 func (p *Prometheus) ReportRelayDisconnection(address domain.RelayAddress, err error) {
-	go func() {
-		p.relayConnectionDisconnectionsCounter.With(prometheus.Labels{
-			labelAddress: address.String(),
-			labelReason:  p.getDisconnectionReason(err),
-		}).Inc()
-	}()
+	go p.relayConnectionDisconnectionsCounter.With(prometheus.Labels{
+		labelAddress: address.String(),
+		labelReason:  p.getDisconnectionReason(err),
+	}).Inc()
 }
 
 func (p *Prometheus) ReportNumberOfStoredRelayAddresses(n int) {
-	go func() {
-		p.storedRelayAddressesGauge.Set(float64(n))
-	}()
+	go p.storedRelayAddressesGauge.Set(float64(n))
 }
 
 func (p *Prometheus) ReportNumberOfStoredEvents(n int) {
-	go func() {
-		p.storedEventsGauge.Set(float64(n))
-	}()
+	go p.storedEventsGauge.Set(float64(n))
 }
 
 func (p *Prometheus) ReportEventSentToRelay(address domain.RelayAddress, decision app.SendEventToRelayDecision, result app.SendEventToRelayResult) {
-	go func() {
-		p.eventsSentToRelayCounter.With(prometheus.Labels{
-			labelAddress:  address.String(),
-			labelDecision: decision.String(),
-			labelResult:   result.String(),
-		}).Inc()
-	}()
+	go p.eventsSentToRelayCounter.With(prometheus.Labels{
+		labelAddress:  address.String(),
+		labelDecision: decision.String(),
+		labelResult:   result.String(),
+	}).Inc()
 }
 
 func (p *Prometheus) ReportNotice(address domain.RelayAddress, noticeType relays.NoticeType) {
-	go func() {
-		p.noticeTypeCounter.With(prometheus.Labels{
-			labelAddress:    address.String(),
-			labelNoticeType: string(noticeType),
-		}).Inc()
-	}()
+	go p.noticeTypeCounter.With(prometheus.Labels{
+		labelAddress:    address.String(),
+		labelNoticeType: string(noticeType),
+	}).Inc()
 }
 
 func (p *Prometheus) Registry() *prometheus.Registry {
@@ -387,9 +363,7 @@ func (a *ApplicationCall) End(err *error) {
 
 	labels := a.getLabels(err)
 	a.p.applicationHandlerCallsCounter.With(labels).Inc()
-	go func() {
-		a.p.applicationHandlerCallDurationHistogram.With(labels).Observe(duration.Seconds())
-	}()
+	go a.p.applicationHandlerCallDurationHistogram.With(labels).Observe(duration.Seconds())
 }
 
 func (a *ApplicationCall) getLabels(err *error) prometheus.Labels {
