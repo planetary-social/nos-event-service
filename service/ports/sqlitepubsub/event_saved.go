@@ -57,7 +57,7 @@ func (s *EventSavedEventSubscriber) Run(ctx context.Context) error {
 					fmt.Sprintf("Queue size %d > %d. Sending backpressure signal to slow down", queueSize, backPressureThreshold),
 				)
 				s.handler.NotifyBackPressure()
-			} else if queueSize < backPressureThreshold/2 {
+			} else {
 				s.handler.ResolveBackPressure()
 			}
 

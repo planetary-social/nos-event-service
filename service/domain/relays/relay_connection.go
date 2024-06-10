@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"regexp"
 	"strings"
 	"sync"
@@ -23,6 +24,11 @@ import (
 const (
 	ReconnectionBackoff        = 5 * time.Minute
 	MaxDialReconnectionBackoff = 30 * time.Minute
+
+	// The maximum time we are willing to wait for the backpressure to resolve
+	// so it's not only based on queue size. We should adjust this based on
+	// real-world data.
+	BackPressureWaitTimeout = 60 * time.Minute
 )
 
 const (
@@ -126,6 +132,10 @@ func (r *RelayConnection) Run(ctx context.Context) {
 }
 
 func (r *RelayConnection) WaitUntilNoBackPressure(ctx context.Context) {
+	jitteredTimeout := addJitter(BackPressureWaitTimeout, 0.5)
+	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, jitteredTimeout)
+	defer cancelTimeout()
+
 	var resolvedBackPressureCtx context.Context
 	var cancelBackPressure context.CancelFunc
 
@@ -134,7 +144,15 @@ func (r *RelayConnection) WaitUntilNoBackPressure(ctx context.Context) {
 		r.cancelBackPressure = cancelBackPressure
 	})
 
-	<-resolvedBackPressureCtx.Done()
+	select {
+	case <-ctx.Done():
+	case <-resolvedBackPressureCtx.Done():
+	case <-timeoutCtx.Done():
+	}
+
+	if cancelBackPressure != nil {
+		cancelBackPressure()
+	}
 
 	r.setState(RelayConnectionStateDisconnected)
 }
@@ -241,6 +259,11 @@ func (r *RelayConnection) scheduleSendingEvent(ctx context.Context, event domain
 		}
 		return true
 	}
+}
+
+func addJitter(baseTimeout time.Duration, jitterFraction float64) time.Duration {
+	jitter := time.Duration(rand.Float64() * float64(baseTimeout) * jitterFraction)
+	return baseTimeout + jitter
 }
 
 func (r *RelayConnection) logRunErr(err error) {
