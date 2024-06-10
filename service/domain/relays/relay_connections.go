@@ -75,23 +75,45 @@ func (d *RelayConnections) SendEvent(ctx context.Context, relayAddress domain.Re
 }
 
 func (d *RelayConnections) NotifyBackPressure() {
-	d.connectionsLock.Lock()
-	defer d.connectionsLock.Unlock()
+	needsLock := false
 	for _, connection := range d.connections {
 		if connection.cancelRun != nil && connection.Address().HostWithoutPort() != "relay.nos.social" {
-			connection.cancelRun()
-			connection.cancelRun = nil
+			needsLock = true
+			break
+		}
+	}
+
+	if needsLock {
+		d.connectionsLock.Lock()
+		defer d.connectionsLock.Unlock()
+
+		for _, connection := range d.connections {
+			if connection.cancelRun != nil && connection.Address().HostWithoutPort() != "relay.nos.social" {
+				connection.cancelRun()
+				connection.cancelRun = nil
+			}
 		}
 	}
 }
 
 func (d *RelayConnections) ResolveBackPressure() {
-	d.connectionsLock.Lock()
-	defer d.connectionsLock.Unlock()
+	needsLock := false
 	for _, connection := range d.connections {
 		if connection.cancelBackPressure != nil {
-			connection.cancelBackPressure()
-			connection.cancelBackPressure = nil
+			needsLock = true
+			break
+		}
+	}
+
+	if needsLock {
+		d.connectionsLock.Lock()
+		defer d.connectionsLock.Unlock()
+
+		for _, connection := range d.connections {
+			if connection.cancelBackPressure != nil {
+				connection.cancelBackPressure()
+				connection.cancelBackPressure = nil
+			}
 		}
 	}
 }
@@ -120,6 +142,7 @@ func (d *RelayConnections) storeMetrics() {
 	}
 	d.metrics.ReportRelayConnectionsState(m)
 }
+
 func (r *RelayConnections) getRateLimitNoticeBackoffManager(relayAddress domain.RelayAddress) *RateLimitNoticeBackoffManager {
 	rateLimitNoticeBackoffManager, exists := r.rateLimitNoticeBackoffManagers[relayAddress.HostWithoutPort()]
 	if !exists {
