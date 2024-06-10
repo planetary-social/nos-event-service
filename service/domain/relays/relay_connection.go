@@ -70,7 +70,6 @@ type RelayConnection struct {
 	eventsToSendMutex             sync.Mutex
 	newEventsCh                   chan domain.Event
 	rateLimitNoticeBackoffManager *RateLimitNoticeBackoffManager
-	cancelBackPressure            context.CancelFunc
 }
 
 func NewRelayConnection(
@@ -90,7 +89,6 @@ func NewRelayConnection(
 		eventsToSend:                  make(map[domain.EventId]*eventToSend),
 		newEventsCh:                   make(chan domain.Event),
 		rateLimitNoticeBackoffManager: rateLimitNoticeBackoffManager,
-		cancelBackPressure:            nil,
 	}
 }
 
@@ -108,10 +106,6 @@ func (r *RelayConnection) Run(ctx context.Context) {
 		if r.Address().HostWithoutPort() == "relay.nos.social" {
 			// We control relay.nos.social, so we don't backoff here
 			backoff = 0
-		} else if errors.Is(err, BackPressureError) {
-			// Only calling r.cancelBackPressure() can resolve the backpressure
-			r.WaitUntilNoBackPressure(ctx)
-			backoff = 0
 		}
 
 		select {
@@ -121,20 +115,6 @@ func (r *RelayConnection) Run(ctx context.Context) {
 			continue
 		}
 	}
-}
-
-func (r *RelayConnection) WaitUntilNoBackPressure(ctx context.Context) {
-	var resolvedBackPressureCtx context.Context
-	var cancelBackPressure context.CancelFunc
-
-	r.setStateWithFn(RelayConnectionStateBackPressured, func() {
-		resolvedBackPressureCtx, cancelBackPressure = context.WithCancel(ctx)
-		r.cancelBackPressure = cancelBackPressure
-	})
-
-	<-resolvedBackPressureCtx.Done()
-
-	r.setState(RelayConnectionStateDisconnected)
 }
 
 func (r *RelayConnection) State() RelayConnectionState {
@@ -356,8 +336,8 @@ func (r *RelayConnection) run(ctx context.Context) error {
 		}
 
 		if r.state == RelayConnectionStateBackPressured {
-			// Load shedding under backpressure
-			continue
+			// Load shedding under backpressure, we just disconnect
+			return BackPressureError
 		}
 
 		if err := r.handleMessage(messageBytes); err != nil {
@@ -611,14 +591,6 @@ func (r *RelayConnection) setState(state RelayConnectionState) {
 	defer r.stateMutex.Unlock()
 
 	r.state = state
-}
-
-func (r *RelayConnection) setStateWithFn(state RelayConnectionState, fn func()) {
-	r.stateMutex.Lock()
-	defer r.stateMutex.Unlock()
-
-	r.state = state
-	fn()
 }
 
 func (r *RelayConnection) manageSubs(ctx context.Context, conn Connection) error {

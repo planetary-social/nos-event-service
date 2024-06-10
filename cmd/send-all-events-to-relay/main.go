@@ -148,7 +148,7 @@ func (u *EventUploader) worker(ctx context.Context) {
 func (u *EventUploader) sendEvent(ctx context.Context, event domain.Event) error {
 	for {
 		if err := u.eventSender.SendEvent(ctx, u.address, event); err != nil {
-			if errors.Is(err, relays.BackPressureError) {
+			if errors.Is(err, relays.ErrEventReplaced) {
 				u.eventsRelayReplaced.Add(1)
 				u.allEvents.Add(1)
 			} else {
