@@ -593,14 +593,6 @@ func (r *RelayConnection) setState(state RelayConnectionState) {
 	r.state = state
 }
 
-func (r *RelayConnection) setStateWithFn(state RelayConnectionState, fn func()) {
-	r.stateMutex.Lock()
-	defer r.stateMutex.Unlock()
-
-	r.state = state
-	fn()
-}
-
 func (r *RelayConnection) manageSubs(ctx context.Context, conn Connection) error {
 	defer conn.Close()
 
