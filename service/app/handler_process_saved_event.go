@@ -18,11 +18,14 @@ var (
 		domain.EventKindContacts,
 		domain.EventKindRelayListMetadata,
 	)
+
+	// If you change this, ensure this matches with the relay.nos.social filters
+	// https://github.com/planetary-social/nosrelay/blob/main/strfry/config/strfry.conf
 	pushToRelayFilter = NewEventFilter(
 		internal.Pointer(900*time.Second),
 		nil,
-		internal.Pointer(65536),
-		internal.Pointer(1024),
+		internal.Pointer(262144),
+		internal.Pointer(3000),
 	)
 )
 
