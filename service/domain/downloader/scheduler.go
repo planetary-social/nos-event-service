@@ -14,7 +14,7 @@ import (
 const (
 	sendOutTasksEvery = 100 * time.Millisecond
 
-	initialWindowAge = 1 * time.Hour
+	initialWindowAge = 15 * time.Minute
 	windowSize       = 1 * time.Minute
 
 	timeWindowTaskConcurrency = 1
