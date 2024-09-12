@@ -24,7 +24,7 @@ var (
 	pushToRelayFilter = NewEventFilter(
 		internal.Pointer(900*time.Second),
 		nil,
-		internal.Pointer(262144),
+		internal.Pointer(196608),
 		internal.Pointer(3000),
 	)
 )
