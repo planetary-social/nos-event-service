@@ -36,6 +36,7 @@ func BuildService(context.Context, config.Config) (Service, func(), error) {
 		domainSet,
 		externalPubsubSet,
 		extractConfigSet,
+		bloomSet,
 	)
 	return Service{}, nil, nil
 }

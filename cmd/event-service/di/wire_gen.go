@@ -54,7 +54,8 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 		cleanup()
 		return Service{}, nil, err
 	}
-	saveReceivedEventHandler := app.NewSaveReceivedEventHandler(genericTransactionProvider, logger, prometheusPrometheus)
+	eventFilter := provideBloomFilter()
+	saveReceivedEventHandler := app.NewSaveReceivedEventHandler(genericTransactionProvider, logger, prometheusPrometheus, eventFilter)
 	relaysExtractor := domain.NewRelaysExtractor(logger)
 	contactsExtractor := domain.NewContactsExtractor(logger)
 	watermillAdapter := logging.NewWatermillAdapter(logger)

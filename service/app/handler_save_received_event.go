@@ -7,6 +7,7 @@ import (
 	"github.com/planetary-social/nos-event-service/internal"
 	"github.com/planetary-social/nos-event-service/internal/logging"
 	"github.com/planetary-social/nos-event-service/service/domain"
+	"github.com/planetary-social/nos-event-service/service/domain/bloom"
 	"github.com/planetary-social/nos-event-service/service/domain/downloader"
 )
 
@@ -32,17 +33,20 @@ type SaveReceivedEventHandler struct {
 	transactionProvider TransactionProvider
 	logger              logging.Logger
 	metrics             Metrics
+	duplicateFilter     *bloom.EventFilter
 }
 
 func NewSaveReceivedEventHandler(
 	transactionProvider TransactionProvider,
 	logger logging.Logger,
 	metrics Metrics,
+	duplicateFilter *bloom.EventFilter,
 ) *SaveReceivedEventHandler {
 	return &SaveReceivedEventHandler{
 		transactionProvider: transactionProvider,
 		logger:              logger.New("saveReceivedEventHandler"),
 		metrics:             metrics,
+		duplicateFilter:     duplicateFilter,
 	}
 }
 
@@ -67,6 +71,16 @@ func (h *SaveReceivedEventHandler) Handle(ctx context.Context, cmd SaveReceivedE
 		return nil
 	}
 
+	// Quick check in Bloom filter first
+	if h.duplicateFilter.Contains(cmd.event.Id()) {
+		h.logger.
+			Debug().
+			WithField("event", cmd.event.String()).
+			WithField("address", cmd.relay.String()).
+			Message("event found in Bloom filter, skipping")
+		return nil
+	}
+
 	if err := h.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
 		exists, err := adapters.Events.Exists(ctx, cmd.event.Id())
 		if err != nil {
@@ -74,7 +88,8 @@ func (h *SaveReceivedEventHandler) Handle(ctx context.Context, cmd SaveReceivedE
 		}
 
 		if exists {
-			return nil // we want to avoid publishing internal events for no reason
+			h.duplicateFilter.Add(cmd.event.Id()) // Add to filter since it exists
+			return nil                            // we want to avoid publishing internal events for no reason
 		}
 
 		shouldBeDownloaded, err := h.shouldBeDownloaded(ctx, adapters, cmd.event)
@@ -99,6 +114,8 @@ func (h *SaveReceivedEventHandler) Handle(ctx context.Context, cmd SaveReceivedE
 		if err := adapters.Events.Save(ctx, event); err != nil {
 			return errors.Wrap(err, "error saving the event")
 		}
+
+		h.duplicateFilter.Add(event.Id()) // Add to filter after successful save
 
 		if err := adapters.Publisher.PublishEventSaved(ctx, event.Id()); err != nil {
 			return errors.Wrap(err, "error publishing")
