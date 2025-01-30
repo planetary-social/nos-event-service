@@ -16,7 +16,7 @@ func NewMetrics() *Metrics {
 }
 
 func (m Metrics) StartApplicationCall(handlerName string) app.ApplicationCall {
-	return NewApplicationCall()
+	return &ApplicationCall{}
 }
 
 func (m Metrics) ReportNumberOfRelayDownloaders(n int) {
@@ -46,9 +46,5 @@ func (m Metrics) ReportNotice(address domain.RelayAddress, noticeType relays.Not
 type ApplicationCall struct {
 }
 
-func NewApplicationCall() *ApplicationCall {
-	return &ApplicationCall{}
-}
-
-func (a ApplicationCall) End(err *error) {
+func (a *ApplicationCall) End(err *error) {
 }

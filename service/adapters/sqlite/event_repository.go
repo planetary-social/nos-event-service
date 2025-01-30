@@ -134,3 +134,15 @@ func (m *EventRepository) readEvent(scanner scanner) (domain.Event, error) {
 
 	return event, nil
 }
+
+func (r *EventRepository) Delete(ctx context.Context, eventID domain.EventId) error {
+	_, err := r.tx.ExecContext(ctx, `
+	DELETE FROM events
+	WHERE event_id=$1`,
+		eventID.Hex(),
+	)
+	if err != nil {
+		return errors.Wrap(err, "error executing the delete query")
+	}
+	return nil
+}

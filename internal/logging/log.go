@@ -270,3 +270,51 @@ func init() {
 		}
 	}
 }
+
+type nopLogger struct{}
+
+func NewNopLogger() Logger {
+	return &nopLogger{}
+}
+
+func (n *nopLogger) Trace() Entry {
+	return &nopEntry{}
+}
+
+func (n *nopLogger) Debug() Entry {
+	return &nopEntry{}
+}
+
+func (n *nopLogger) Info() Entry {
+	return &nopEntry{}
+}
+
+func (n *nopLogger) Error() Entry {
+	return &nopEntry{}
+}
+
+func (n *nopLogger) WithError(err error) Logger {
+	return n
+}
+
+func (n *nopLogger) WithField(key string, value interface{}) Logger {
+	return n
+}
+
+func (n *nopLogger) New(component string) Logger {
+	return n
+}
+
+type nopEntry struct{}
+
+func (n *nopEntry) WithError(err error) Entry {
+	return n
+}
+
+func (n *nopEntry) WithField(key string, value interface{}) Entry {
+	return n
+}
+
+func (n *nopEntry) Message(msg string) {
+	// Do nothing
+}

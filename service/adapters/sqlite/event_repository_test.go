@@ -210,3 +210,41 @@ func TestEventRepository_ListReturnsEventsIfRepositoryIsNotEmpty(t *testing.T) {
 	})
 	require.NoError(t, err)
 }
+
+func TestEventRepository_Delete(t *testing.T) {
+	ctx := fixtures.TestContext(t)
+
+	event := fixtures.SomeEvent()
+	db := fixtures.TestDatabase(t)
+
+	tx, err := db.Begin()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = tx.Rollback()
+	})
+
+	repo, err := NewEventRepository(tx)
+	require.NoError(t, err)
+
+	// Save the event first
+	err = repo.Save(ctx, event)
+	require.NoError(t, err)
+
+	// Verify it exists
+	exists, err := repo.Exists(ctx, event.Id())
+	require.NoError(t, err)
+	require.True(t, exists)
+
+	// Delete the event
+	err = repo.Delete(ctx, event.Id())
+	require.NoError(t, err)
+
+	// Verify it's gone
+	exists, err = repo.Exists(ctx, event.Id())
+	require.NoError(t, err)
+	require.False(t, exists)
+
+	// Delete again should not error
+	err = repo.Delete(ctx, event.Id())
+	require.NoError(t, err)
+}

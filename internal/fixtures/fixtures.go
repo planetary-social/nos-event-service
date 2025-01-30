@@ -13,6 +13,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/planetary-social/nos-event-service/internal"
 	"github.com/planetary-social/nos-event-service/internal/logging"
+	"github.com/planetary-social/nos-event-service/service/app"
 	"github.com/planetary-social/nos-event-service/service/domain"
 	"github.com/planetary-social/nos-event-service/service/domain/downloader"
 	"github.com/stretchr/testify/require"
@@ -220,4 +221,26 @@ func RequireEqualEventSlices(tb testing.TB, a, b []domain.Event) {
 		require.Equal(tb, a[i].Id(), b[i].Id())
 		require.Equal(tb, a[i].Raw(), b[i].Raw())
 	}
+}
+
+type MockTransactionProvider struct {
+	EventRepository app.EventRepository
+}
+
+func NewTransactionProvider(eventRepo app.EventRepository) *MockTransactionProvider {
+	return &MockTransactionProvider{
+		EventRepository: eventRepo,
+	}
+}
+
+func (m *MockTransactionProvider) Transact(ctx context.Context, f func(context.Context, app.Adapters) error) error {
+	return f(ctx, app.Adapters{
+		Events: m.EventRepository,
+	})
+}
+
+func (m *MockTransactionProvider) ReadOnly(ctx context.Context, f func(context.Context, app.Adapters) error) error {
+	return f(ctx, app.Adapters{
+		Events: m.EventRepository,
+	})
 }
