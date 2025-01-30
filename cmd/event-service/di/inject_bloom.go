@@ -14,7 +14,7 @@ var bloomSet = wire.NewSet(
 func provideBloomFilter() *bloom.EventFilter {
 	config := bloom.FilterConfig{
 		ExpectedItems:     1_000_000, // Expect 1M events per rotation
-		FalsePositiveRate: 0.01,      // 1% false positive rate
+		FalsePositiveRate: 0.001,     // 0.1% false positive rate
 		RotationInterval:  time.Hour, // Rotate every hour
 	}
 	return bloom.NewEventFilter(config)
