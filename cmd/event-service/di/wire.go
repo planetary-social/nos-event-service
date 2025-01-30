@@ -55,42 +55,13 @@ func BuildTestAdapters(context.Context, testing.TB) (sqlite.TestedItems, func(),
 }
 
 type TestApplication struct {
-	GetEventsHandler *app.GetEventsHandler
-
 	EventRepository *mocks.EventRepository
 }
 
 func BuildTestApplication(context.Context, testing.TB) (TestApplication, error) {
 	wire.Build(
 		wire.Struct(new(TestApplication), "*"),
-
-		wire.Struct(new(app.Adapters), "*"),
-
-		mocks.NewTransactionProvider,
-		wire.Bind(new(app.TransactionProvider), new(*mocks.TransactionProvider)),
-
 		mocks.NewEventRepository,
-		wire.Bind(new(app.EventRepository), new(*mocks.EventRepository)),
-
-		mocks.NewRelayRepository,
-		wire.Bind(new(app.RelayRepository), new(*mocks.RelayRepository)),
-
-		mocks.NewContactRepository,
-		wire.Bind(new(app.ContactRepository), new(*mocks.ContactRepository)),
-
-		mocks.NewPublicKeysToMonitorRepository,
-		wire.Bind(new(app.PublicKeysToMonitorRepository), new(*mocks.PublicKeysToMonitorRepository)),
-
-		mocks.NewPublisher,
-		wire.Bind(new(app.Publisher), new(*mocks.Publisher)),
-
-		mocks.NewMetrics,
-		wire.Bind(new(app.Metrics), new(*mocks.Metrics)),
-
-		applicationSet,
-		loggingSet,
-
-		wire.Value(logging.LevelError),
 	)
 	return TestApplication{}, nil
 }

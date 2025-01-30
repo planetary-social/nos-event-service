@@ -2,7 +2,7 @@ package http
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 
@@ -62,8 +62,6 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 func (s *Server) createMux() http.Handler {
 	r := mux.NewRouter()
 	r.Handle("/metrics", promhttp.HandlerFor(s.prometheus.Registry(), promhttp.HandlerOpts{}))
-	r.HandleFunc("/events", rest.Wrap(s.serveEvents))
-	r.HandleFunc("/events/{id}", rest.Wrap(s.serveEvent))
 	r.HandleFunc("/public-keys/{hex}", rest.Wrap(s.servePublicKey))
 	r.HandleFunc("/_health", rest.Wrap(s.serveHealthCheck))
 	r.HandleFunc("/", s.serveWs)
@@ -96,92 +94,6 @@ func (s *Server) serveWs(rw http.ResponseWriter, r *http.Request) {
 			s.logger.Error().WithError(err).Message("error handling the connection")
 		}
 	}
-}
-
-func (s *Server) serveEvents(r *http.Request) rest.RestResponse {
-	switch r.Method {
-	case http.MethodGet:
-		var after *domain.EventId
-		if afterString := r.URL.Query().Get("after"); afterString != "" {
-			id, err := domain.NewEventIdFromHex(afterString)
-			if err != nil {
-				return rest.ErrBadRequest.WithMessage("After must be a hex encoded public key.")
-			}
-			after = &id
-		}
-
-		result, err := s.app.GetEvents.Handle(r.Context(), app.NewGetEvents(after))
-		if err != nil {
-			s.logger.Error().WithError(err).Message("error getting events")
-			return rest.ErrInternalServerError
-		}
-
-		response, err := newGetEventsResponse(result)
-		if err != nil {
-			s.logger.Error().WithError(err).Message("error ccreting a response")
-			return rest.ErrInternalServerError
-		}
-
-		return rest.NewResponse(response)
-	default:
-		return rest.ErrMethodNotAllowed
-	}
-}
-
-type getEventsResponse struct {
-	Events            []json.RawMessage `json:"events"`
-	ThereIsMoreEvents bool              `json:"thereIsMoreEvents"`
-}
-
-func newGetEventsResponse(result app.GetEventsResult) (*getEventsResponse, error) {
-	events := make([]json.RawMessage, 0) // avoid sending null in responses
-	for _, event := range result.Events() {
-		eventJSON, err := event.MarshalJSON()
-		if err != nil {
-			return nil, errors.Wrap(err, "error marshaling")
-		}
-		events = append(events, eventJSON)
-	}
-
-	return &getEventsResponse{
-		Events:            events,
-		ThereIsMoreEvents: result.ThereIsMoreEvents(),
-	}, nil
-}
-
-func (s *Server) serveEvent(r *http.Request) rest.RestResponse {
-	switch r.Method {
-	case http.MethodGet:
-		vars := mux.Vars(r)
-		idString := vars["id"]
-
-		eventID, err := domain.NewEventIdFromHex(idString)
-		if err != nil {
-			return rest.ErrBadRequest.WithMessage("event id must be in hex")
-		}
-
-		event, err := s.app.GetEvent.Handle(r.Context(), app.NewGetEvent(eventID))
-		if err != nil {
-			if errors.Is(err, app.ErrEventNotFound) {
-				return rest.ErrNotFound
-			}
-
-			s.logger.Error().WithError(err).Message("error getting an event")
-			return rest.ErrInternalServerError
-		}
-
-		return rest.NewResponse(newGetEventResponse(event))
-	default:
-		return rest.ErrMethodNotAllowed
-	}
-}
-
-type getEventResponse struct {
-	Event json.RawMessage `json:"event"`
-}
-
-func newGetEventResponse(event domain.Event) getEventResponse {
-	return getEventResponse{Event: event.Raw()}
 }
 
 func (s *Server) servePublicKey(r *http.Request) rest.RestResponse {
@@ -253,8 +165,10 @@ func (s *Server) handleConnection(ctx context.Context, conn *websocket.Conn) err
 				return errors.Wrap(err, "error writing a message")
 			}
 		default:
-			s.logger.Error().WithField("message", message).Message("received an unknown message")
-			return errors.New("unknown message received")
+			s.logger.
+				Debug().
+				WithField("messageType", fmt.Sprintf("%T", message)).
+				Message("received an unsupported message type")
 		}
 	}
 }

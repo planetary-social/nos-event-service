@@ -9,8 +9,6 @@ package di
 import (
 	"context"
 	"database/sql"
-	"testing"
-
 	"github.com/google/wire"
 	"github.com/planetary-social/nos-event-service/internal/fixtures"
 	"github.com/planetary-social/nos-event-service/internal/logging"
@@ -30,6 +28,7 @@ import (
 	memorypubsub2 "github.com/planetary-social/nos-event-service/service/ports/memorypubsub"
 	"github.com/planetary-social/nos-event-service/service/ports/sqlitepubsub"
 	"github.com/planetary-social/nos-event-service/service/ports/timer"
+	"testing"
 )
 
 // Injectors from wire.go:
@@ -73,17 +72,13 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	subscriber := sqlite.NewSubscriber(pubSub, db)
 	updateMetricsHandler := app.NewUpdateMetricsHandler(genericTransactionProvider, subscriber, logger, prometheusPrometheus)
 	addPublicKeyToMonitorHandler := app.NewAddPublicKeyToMonitorHandler(genericTransactionProvider, logger, prometheusPrometheus)
-	getEventHandler := app.NewGetEventHandler(genericTransactionProvider, logger, prometheusPrometheus)
 	getPublicKeyInfoHandler := app.NewGetPublicKeyInfoHandler(genericTransactionProvider, logger, prometheusPrometheus)
-	getEventsHandler := app.NewGetEventsHandler(genericTransactionProvider, logger, prometheusPrometheus)
 	application := app.Application{
 		SaveReceivedEvent:     saveReceivedEventHandler,
 		ProcessSavedEvent:     processSavedEventHandler,
 		UpdateMetrics:         updateMetricsHandler,
 		AddPublicKeyToMonitor: addPublicKeyToMonitorHandler,
-		GetEvent:              getEventHandler,
 		GetPublicKeyInfo:      getPublicKeyInfoHandler,
-		GetEvents:             getEventsHandler,
 	}
 	server := http.NewServer(configConfig, logger, application, prometheusPrometheus)
 	bootstrapRelaySource := relays.NewBootstrapRelaySource()
@@ -170,35 +165,11 @@ func BuildTestAdapters(contextContext context.Context, tb testing.TB) (sqlite.Te
 
 func BuildTestApplication(contextContext context.Context, tb testing.TB) (TestApplication, error) {
 	eventRepository := mocks.NewEventRepository()
-	relayRepository := mocks.NewRelayRepository()
-	contactRepository := mocks.NewContactRepository()
-	publicKeysToMonitorRepository := mocks.NewPublicKeysToMonitorRepository()
-	publisher := mocks.NewPublisher()
-	appAdapters := app.Adapters{
-		Events:              eventRepository,
-		Relays:              relayRepository,
-		Contacts:            contactRepository,
-		PublicKeysToMonitor: publicKeysToMonitorRepository,
-		Publisher:           publisher,
-	}
-	transactionProvider := mocks.NewTransactionProvider(appAdapters)
-	level := _wireLevelValue
-	logger, err := newLogger(level)
-	if err != nil {
-		return TestApplication{}, err
-	}
-	metrics := mocks.NewMetrics()
-	getEventsHandler := app.NewGetEventsHandler(transactionProvider, logger, metrics)
 	testApplication := TestApplication{
-		GetEventsHandler: getEventsHandler,
-		EventRepository:  eventRepository,
+		EventRepository: eventRepository,
 	}
 	return testApplication, nil
 }
-
-var (
-	_wireLevelValue = logging.LevelError
-)
 
 func buildTransactionSqliteAdapters(db *sql.DB, tx *sql.Tx, diBuildTransactionSqliteAdaptersDependencies buildTransactionSqliteAdaptersDependencies) (app.Adapters, error) {
 	eventRepository, err := sqlite.NewEventRepository(tx)
@@ -251,8 +222,6 @@ func buildTestTransactionSqliteAdapters(db *sql.DB, tx *sql.Tx, diBuildTransacti
 // wire.go:
 
 type TestApplication struct {
-	GetEventsHandler *app.GetEventsHandler
-
 	EventRepository *mocks.EventRepository
 }
 
