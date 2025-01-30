@@ -72,5 +72,15 @@ func (e *EventRepository) Delete(ctx context.Context, eventID domain.EventId) er
 	e.DeleteCalls = append(e.DeleteCalls, EventRepositoryDeleteCall{
 		EventID: eventID,
 	})
+
+	// Remove the event from SaveCalls
+	var newSaveCalls []EventRepositorySaveCall
+	for _, call := range e.SaveCalls {
+		if call.Event.Id() != eventID {
+			newSaveCalls = append(newSaveCalls, call)
+		}
+	}
+	e.SaveCalls = newSaveCalls
+
 	return nil
 }

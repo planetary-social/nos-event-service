@@ -213,38 +213,37 @@ func TestEventRepository_ListReturnsEventsIfRepositoryIsNotEmpty(t *testing.T) {
 
 func TestEventRepository_Delete(t *testing.T) {
 	ctx := fixtures.TestContext(t)
+	adapters := NewTestAdapters(ctx, t)
 
 	event := fixtures.SomeEvent()
-	db := fixtures.TestDatabase(t)
 
-	tx, err := db.Begin()
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = tx.Rollback()
+	// Save and verify existence
+	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.EventRepository.Save(ctx, event)
+		require.NoError(t, err)
+
+		exists, err := adapters.EventRepository.Exists(ctx, event.Id())
+		require.NoError(t, err)
+		require.True(t, exists)
+
+		return nil
 	})
-
-	repo, err := NewEventRepository(tx)
 	require.NoError(t, err)
 
-	// Save the event first
-	err = repo.Save(ctx, event)
-	require.NoError(t, err)
+	// Delete and verify deletion
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.EventRepository.Delete(ctx, event.Id())
+		require.NoError(t, err)
 
-	// Verify it exists
-	exists, err := repo.Exists(ctx, event.Id())
-	require.NoError(t, err)
-	require.True(t, exists)
+		exists, err := adapters.EventRepository.Exists(ctx, event.Id())
+		require.NoError(t, err)
+		require.False(t, exists)
 
-	// Delete the event
-	err = repo.Delete(ctx, event.Id())
-	require.NoError(t, err)
+		// Delete again should not error
+		err = adapters.EventRepository.Delete(ctx, event.Id())
+		require.NoError(t, err)
 
-	// Verify it's gone
-	exists, err = repo.Exists(ctx, event.Id())
-	require.NoError(t, err)
-	require.False(t, exists)
-
-	// Delete again should not error
-	err = repo.Delete(ctx, event.Id())
+		return nil
+	})
 	require.NoError(t, err)
 }

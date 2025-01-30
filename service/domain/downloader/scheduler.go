@@ -14,7 +14,7 @@ import (
 const (
 	sendOutTasksEvery = 100 * time.Millisecond
 
-	initialWindowAge = 15 * time.Minute
+	initialWindowAge = 60 * time.Minute
 	windowSize       = 1 * time.Minute
 
 	timeWindowTaskConcurrency = 1
@@ -321,7 +321,7 @@ func NewTimeWindowTaskGenerator(
 ) (*TimeWindowTaskGenerator, error) {
 	now := currentTimeProvider.GetCurrentTime()
 
-	startingWindow, err := NewTimeWindow(now.Add(-initialWindowAge-windowSize), windowSize)
+	startingWindow, err := NewTimeWindow(now.Add(-initialWindowAge).Add(-windowSize), windowSize)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating the starting time window")
 	}

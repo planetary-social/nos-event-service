@@ -3,6 +3,7 @@ package mocks
 import (
 	"context"
 
+	"github.com/planetary-social/nos-event-service/service/app"
 	"github.com/planetary-social/nos-event-service/service/domain"
 )
 
@@ -14,11 +15,11 @@ func NewContactRepository() *ContactRepository {
 }
 
 func (c ContactRepository) GetCurrentContactsEvent(ctx context.Context, author domain.PublicKey) (domain.Event, error) {
-	panic("implement me")
+	return domain.Event{}, app.ErrNoContactsEvent
 }
 
 func (c ContactRepository) SetContacts(ctx context.Context, event domain.Event, contacts []domain.PublicKey) error {
-	panic("implement me")
+	return nil
 }
 
 func (c ContactRepository) GetFollowees(ctx context.Context, publicKey domain.PublicKey) ([]domain.PublicKey, error) {

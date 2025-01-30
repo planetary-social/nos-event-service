@@ -15,12 +15,17 @@ func TestProcessSavedEventHandler_DeletesEventAfterProcessing(t *testing.T) {
 
 	// Create mocks
 	eventRepo := mocks.NewEventRepository()
+	relayRepo := mocks.NewRelayRepository()
+	contactRepo := mocks.NewContactRepository()
 	metrics := mocks.NewMetrics()
 	logger := logging.NewNopLogger()
 
+	// Create mock transaction provider with all repositories
+	transactionProvider := fixtures.NewTransactionProvider(eventRepo, relayRepo, contactRepo)
+
 	// Create the handler with mocks
 	handler := app.NewProcessSavedEventHandler(
-		fixtures.NewTransactionProvider(eventRepo),
+		transactionProvider,
 		mocks.NewRelaysExtractor(),
 		mocks.NewContactsExtractor(),
 		mocks.NewExternalEventPublisher(),

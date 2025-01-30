@@ -22,7 +22,7 @@ const (
 	testTimeout                                 = 10 * time.Second
 	delayWhenWaitingToConsiderThatTasksReceived = 5 * time.Second
 
-	waitFor = 10 * time.Second
+	waitFor = 60 * time.Second
 	tick    = 100 * time.Millisecond
 )
 

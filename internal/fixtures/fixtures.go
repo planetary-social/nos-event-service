@@ -224,23 +224,35 @@ func RequireEqualEventSlices(tb testing.TB, a, b []domain.Event) {
 }
 
 type MockTransactionProvider struct {
-	EventRepository app.EventRepository
+	EventRepository   app.EventRepository
+	RelayRepository   app.RelayRepository
+	ContactRepository app.ContactRepository
 }
 
-func NewTransactionProvider(eventRepo app.EventRepository) *MockTransactionProvider {
+func NewTransactionProvider(
+	eventRepo app.EventRepository,
+	relayRepo app.RelayRepository,
+	contactRepo app.ContactRepository,
+) *MockTransactionProvider {
 	return &MockTransactionProvider{
-		EventRepository: eventRepo,
+		EventRepository:   eventRepo,
+		RelayRepository:   relayRepo,
+		ContactRepository: contactRepo,
 	}
 }
 
 func (m *MockTransactionProvider) Transact(ctx context.Context, f func(context.Context, app.Adapters) error) error {
 	return f(ctx, app.Adapters{
-		Events: m.EventRepository,
+		Events:   m.EventRepository,
+		Relays:   m.RelayRepository,
+		Contacts: m.ContactRepository,
 	})
 }
 
 func (m *MockTransactionProvider) ReadOnly(ctx context.Context, f func(context.Context, app.Adapters) error) error {
 	return f(ctx, app.Adapters{
-		Events: m.EventRepository,
+		Events:   m.EventRepository,
+		Relays:   m.RelayRepository,
+		Contacts: m.ContactRepository,
 	})
 }
