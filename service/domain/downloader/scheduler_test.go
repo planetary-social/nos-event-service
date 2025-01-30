@@ -108,9 +108,9 @@ func TestTaskScheduler_SchedulerProducesTasksFromSequentialTimeWindowsLeadingUpT
 			filters[window] = append(filters[window], task.Filter())
 		}
 
-		firstWindowStart := date(2023, time.December, 27, 9, 30, 00)
+		firstWindowStart := date(2023, time.December, 27, 10, 14, 00)
 		var expectedWindows []downloader.TimeWindow
-		for i := 0; i < 59; i++ {
+		for i := 0; i < 15; i++ {
 			window := downloader.MustNewTimeWindow(firstWindowStart.Add(time.Duration(i)*time.Minute), 1*time.Minute)
 			expectedWindows = append(expectedWindows, window)
 		}
@@ -164,11 +164,19 @@ func TestTaskScheduler_ThereIsOneWindowOfDelayToLetRelaysSyncData(t *testing.T) 
 			return a.Start().Compare(b.Start())
 		})
 
-		if assert.Len(t, windows, 59) {
+		if assert.Len(t, windows, 15) {
 			lastWindow := windows[len(windows)-1]
 			assert.Equal(t, date(2023, time.December, 27, 10, 29, 00), lastWindow.End().UTC())
 		}
 	}, waitFor, tick)
+
+	firstWindowStart := date(2023, time.December, 27, 10, 14, 00)
+	var expectedWindows []downloader.TimeWindow
+	for i := 0; i < 16; i++ {
+		windowStart := firstWindowStart.Add(time.Duration(i) * time.Minute)
+		window := downloader.MustNewTimeWindow(windowStart, 1*time.Minute)
+		expectedWindows = append(expectedWindows, window)
+	}
 }
 
 func TestTaskScheduler_TerminatesTasks(t *testing.T) {

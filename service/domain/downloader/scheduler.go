@@ -14,7 +14,7 @@ import (
 const (
 	sendOutTasksEvery = 100 * time.Millisecond
 
-	initialWindowAge = 60 * time.Minute
+	initialWindowAge = 16 * time.Minute
 	windowSize       = 1 * time.Minute
 
 	timeWindowTaskConcurrency = 1
@@ -321,14 +321,17 @@ func NewTimeWindowTaskGenerator(
 ) (*TimeWindowTaskGenerator, error) {
 	now := currentTimeProvider.GetCurrentTime()
 
-	startingWindow, err := NewTimeWindow(now.Add(-initialWindowAge).Add(-windowSize), windowSize)
+	startingWindow, err := NewTimeWindow(
+		now.Add(-initialWindowAge),
+		windowSize,
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating the starting time window")
 	}
 
 	return &TimeWindowTaskGenerator{
-		lastWindow:          startingWindow,
 		currentTimeProvider: currentTimeProvider,
+		lastWindow:          startingWindow,
 		logger:              logger.New("timeWindowTaskGenerator"),
 	}, nil
 }
@@ -370,16 +373,25 @@ func (t *TimeWindowTaskGenerator) Generate(ctx context.Context, kinds []domain.E
 }
 
 func (t *TimeWindowTaskGenerator) maybeGenerateNewTracker(ctx context.Context) (*TimeWindowTaskTracker, bool, error) {
-	nextWindow := t.lastWindow.Advance()
+	currentWindow := t.lastWindow
 	now := t.currentTimeProvider.GetCurrentTime()
-	if nextWindow.End().After(now.Add(-windowSize)) {
+
+	// Only generate windows that have completely elapsed plus a buffer period
+	// The condition ensures we process windows where:
+	//   window.End() <= now - windowSize
+	// This maintains a 1-minute buffer to allow relays to sync final data
+	// Example: When now=10:30:00, we'll process windows up to 10:28:00-10:29:00
+	//          (15 windows from 10:14:00-10:15:00 to 10:28:00-10:29:00)
+	if currentWindow.End().After(now.Add(-windowSize)) {
 		return nil, false, nil
 	}
-	t.lastWindow = nextWindow
-	v, err := NewTimeWindowTaskTracker(nextWindow)
+
+	v, err := NewTimeWindowTaskTracker(currentWindow)
 	if err != nil {
 		return nil, false, errors.Wrap(err, "error creating a task")
 	}
+
+	t.lastWindow = currentWindow.Advance()
 	return v, true, nil
 }
 
