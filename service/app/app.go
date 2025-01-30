@@ -16,6 +16,9 @@ var (
 
 const (
 	applicationHandlerTimeout = 30 * time.Second
+	TagNumberLimit            = 1024
+	EventSizeLimit            = 65536
+	MaxAgeLimit               = 900 * time.Second
 )
 
 type TransactionProvider interface {

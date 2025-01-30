@@ -22,10 +22,12 @@ var (
 	// If you change this, ensure this matches with the relay.nos.social filters
 	// https://github.com/planetary-social/nosrelay/blob/main/strfry/config/strfry.conf
 	pushToRelayFilter = NewEventFilter(
-		internal.Pointer(900*time.Second),
+		nil, // We don't know how long the item has been in the queue, so this
+		// limit is applied when the event is fetched from the relay, not on
+		// publication
 		nil,
-		internal.Pointer(65536),
-		internal.Pointer(1024),
+		internal.Pointer(EventSizeLimit),
+		internal.Pointer(TagNumberLimit),
 	)
 )
 

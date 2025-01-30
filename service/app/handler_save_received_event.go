@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"time"
 
 	"github.com/boreq/errors"
 	"github.com/planetary-social/nos-event-service/internal"
@@ -13,10 +12,10 @@ import (
 
 var (
 	saveFilter = NewEventFilter(
-		internal.Pointer(12*time.Hour),
+		internal.Pointer(MaxAgeLimit),
 		nil,
-		internal.Pointer(1*1000*1000),
-		internal.Pointer(10000),
+		internal.Pointer(EventSizeLimit),
+		internal.Pointer(TagNumberLimit),
 	)
 )
 
