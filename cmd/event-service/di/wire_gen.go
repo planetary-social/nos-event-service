@@ -71,7 +71,7 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	sqliteGenericTransactionProvider := sqlite.NewPubSubTxTransactionProvider(db, transactionRunner)
 	pubSub := sqlite.NewPubSub(sqliteGenericTransactionProvider, logger)
 	subscriber := sqlite.NewSubscriber(pubSub, db)
-	updateMetricsHandler := app.NewUpdateMetricsHandler(genericTransactionProvider, subscriber, logger, prometheusPrometheus)
+	updateMetricsHandler := app.NewUpdateMetricsHandler(genericTransactionProvider, subscriber, logger, prometheusPrometheus, eventFilter)
 	addPublicKeyToMonitorHandler := app.NewAddPublicKeyToMonitorHandler(genericTransactionProvider, logger, prometheusPrometheus)
 	getPublicKeyInfoHandler := app.NewGetPublicKeyInfoHandler(genericTransactionProvider, logger, prometheusPrometheus)
 	application := app.Application{

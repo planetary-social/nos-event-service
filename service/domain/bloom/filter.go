@@ -84,3 +84,7 @@ type FilterStats struct {
 	PreviousSize uint
 	LastRotated  time.Time
 }
+
+func (f *EventFilter) ExpectedItems() uint {
+	return f.config.ExpectedItems
+}

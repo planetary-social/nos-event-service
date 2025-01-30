@@ -143,3 +143,22 @@ var domainSet = wire.NewSet(
 	domain.NewContactsExtractor,
 	wire.Bind(new(app.ContactsExtractor), new(*domain.ContactsExtractor)),
 )
+
+var applicationSet = wire.NewSet(
+	wire.Struct(new(app.Application), "*"),
+
+	app.NewSaveReceivedEventHandler,
+	wire.Bind(new(app.SaveReceivedEventHandler), new(*app.SaveReceivedEventHandler)),
+
+	app.NewProcessSavedEventHandler,
+	wire.Bind(new(app.ProcessSavedEventHandler), new(*app.ProcessSavedEventHandler)),
+
+	app.NewUpdateMetricsHandler,
+	wire.Bind(new(app.UpdateMetricsHandler), new(*app.UpdateMetricsHandler)),
+
+	app.NewAddPublicKeyToMonitorHandler,
+	wire.Bind(new(app.AddPublicKeyToMonitorHandler), new(*app.AddPublicKeyToMonitorHandler)),
+
+	app.NewGetPublicKeyInfoHandler,
+	wire.Bind(new(app.GetPublicKeyInfoHandler), new(*app.GetPublicKeyInfoHandler)),
+)

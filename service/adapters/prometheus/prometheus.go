@@ -45,12 +45,13 @@ type Prometheus struct {
 	subscriptionQueueOldestMessageAgeGauge  *prometheus.GaugeVec
 	relayConnectionStateGauge               *prometheus.GaugeVec
 	receivedEventsCounter                   *prometheus.CounterVec
+	bloomFilterDuplicatesGauge              prometheus.Gauge
+	bloomFilterSaturationGauge              prometheus.Gauge
 	relayConnectionSubscriptionsGauge       *prometheus.GaugeVec
 	relayRateLimitBackoffMsGauge            *prometheus.GaugeVec
 	relayConnectionReceivedMessagesCounter  *prometheus.CounterVec
 	relayConnectionDisconnectionsCounter    *prometheus.CounterVec
 	storedRelayAddressesGauge               prometheus.Gauge
-	storedEventsGauge                       prometheus.Gauge
 	eventsSentToRelayCounter                *prometheus.CounterVec
 
 	registry *prometheus.Registry
@@ -155,18 +156,26 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 			Help: "Number of stored relay addresses.",
 		},
 	)
-	storedEventsGauge := prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "stored_events_gauge",
-			Help: "Number of stored events.",
-		},
-	)
 	eventsSentToRelayCounter := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "events_sent_to_relay_counter",
 			Help: "Number of events sent to relay.",
 		},
 		[]string{labelAddress, labelDecision, labelResult},
+	)
+
+	bloomFilterDuplicatesGauge := prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "bloom_filter_duplicates_current_hour",
+			Help: "Number of duplicate events caught by Bloom filter in the current hour.",
+		},
+	)
+
+	bloomFilterSaturationGauge := prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "bloom_filter_saturation_ratio",
+			Help: "Current Bloom filter's saturation ratio (0.0 to 1.0).",
+		},
 	)
 
 	reg := prometheus.NewRegistry()
@@ -180,12 +189,13 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		relayDownloadersGauge,
 		relayConnectionStateGauge,
 		receivedEventsCounter,
+		bloomFilterDuplicatesGauge,
+		bloomFilterSaturationGauge,
 		relayConnectionSubscriptionsGauge,
 		relayRateLimitBackoffMsGauge,
 		relayConnectionReceivedMessagesCounter,
 		relayConnectionDisconnectionsCounter,
 		storedRelayAddressesGauge,
-		storedEventsGauge,
 		eventsSentToRelayCounter,
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		collectors.NewGoCollector(),
@@ -218,12 +228,13 @@ func NewPrometheus(logger logging.Logger) (*Prometheus, error) {
 		subscriptionQueueOldestMessageAgeGauge:  subscriptionQueueOldestMessageAgeGauge,
 		relayConnectionStateGauge:               relayConnectionStateGauge,
 		receivedEventsCounter:                   receivedEventsCounter,
+		bloomFilterDuplicatesGauge:              bloomFilterDuplicatesGauge,
+		bloomFilterSaturationGauge:              bloomFilterSaturationGauge,
 		relayConnectionSubscriptionsGauge:       relayConnectionSubscriptionsGauge,
 		relayRateLimitBackoffMsGauge:            relayRateLimitBackoffMsGauge,
 		relayConnectionReceivedMessagesCounter:  relayConnectionReceivedMessagesCounter,
 		relayConnectionDisconnectionsCounter:    relayConnectionDisconnectionsCounter,
 		storedRelayAddressesGauge:               storedRelayAddressesGauge,
-		storedEventsGauge:                       storedEventsGauge,
 		eventsSentToRelayCounter:                eventsSentToRelayCounter,
 
 		registry: reg,
@@ -298,8 +309,12 @@ func (p *Prometheus) ReportNumberOfStoredRelayAddresses(n int) {
 	go p.storedRelayAddressesGauge.Set(float64(n))
 }
 
-func (p *Prometheus) ReportNumberOfStoredEvents(n int) {
-	go p.storedEventsGauge.Set(float64(n))
+func (p *Prometheus) ReportDuplicateEventBloomFilter() {
+	go p.bloomFilterDuplicatesGauge.Inc()
+}
+
+func (p *Prometheus) ReportBloomFilterSaturation(ratio float64) {
+	go p.bloomFilterSaturationGauge.Set(ratio)
 }
 
 func (p *Prometheus) ReportEventSentToRelay(address domain.RelayAddress, decision app.SendEventToRelayDecision, result app.SendEventToRelayResult) {

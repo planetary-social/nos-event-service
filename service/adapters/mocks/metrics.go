@@ -43,6 +43,12 @@ func (m Metrics) ReportEventSentToRelay(address domain.RelayAddress, decision ap
 func (m Metrics) ReportNotice(address domain.RelayAddress, noticeType relays.NoticeType) {
 }
 
+func (m Metrics) ReportDuplicateEventBloomFilter() {
+}
+
+func (m Metrics) ReportBloomFilterSaturation(ratio float64) {
+}
+
 type ApplicationCall struct {
 }
 

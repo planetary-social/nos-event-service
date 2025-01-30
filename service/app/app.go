@@ -115,8 +115,9 @@ type Metrics interface {
 	ReportQueueLength(topic string, n int)
 	ReportQueueOldestMessageAge(topic string, age time.Duration)
 	ReportNumberOfStoredRelayAddresses(n int)
-	ReportNumberOfStoredEvents(n int)
 	ReportEventSentToRelay(address domain.RelayAddress, decision SendEventToRelayDecision, result SendEventToRelayResult)
+	ReportDuplicateEventBloomFilter()
+	ReportBloomFilterSaturation(ratio float64)
 }
 
 type ApplicationCall interface {

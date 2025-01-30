@@ -5,6 +5,7 @@ import (
 
 	"github.com/boreq/errors"
 	"github.com/planetary-social/nos-event-service/internal/logging"
+	"github.com/planetary-social/nos-event-service/service/domain/bloom"
 )
 
 type UpdateMetricsHandler struct {
@@ -12,6 +13,7 @@ type UpdateMetricsHandler struct {
 	subscriber          Subscriber
 	logger              logging.Logger
 	metrics             Metrics
+	duplicateFilter     *bloom.EventFilter
 }
 
 func NewUpdateMetricsHandler(
@@ -19,12 +21,14 @@ func NewUpdateMetricsHandler(
 	subscriber Subscriber,
 	logger logging.Logger,
 	metrics Metrics,
+	duplicateFilter *bloom.EventFilter,
 ) *UpdateMetricsHandler {
 	return &UpdateMetricsHandler{
 		transactionProvider: transactionProvider,
 		subscriber:          subscriber,
 		logger:              logger.New("updateMetricsHandler"),
 		metrics:             metrics,
+		duplicateFilter:     duplicateFilter,
 	}
 }
 
@@ -58,16 +62,14 @@ func (h *UpdateMetricsHandler) Handle(ctx context.Context) (err error) {
 		}
 		h.metrics.ReportNumberOfStoredRelayAddresses(n)
 
-		n, err = adapters.Events.Count(ctx)
-		if err != nil {
-			return errors.Wrap(err, "error counting events")
-		}
-		h.metrics.ReportNumberOfStoredEvents(n)
-
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "transaction error")
 	}
+
+	// Update Bloom filter metrics
+	stats := h.duplicateFilter.Stats()
+	h.metrics.ReportBloomFilterSaturation(float64(stats.CurrentSize) / float64(h.duplicateFilter.ExpectedItems()))
 
 	return nil
 }

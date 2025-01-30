@@ -78,6 +78,7 @@ func (h *SaveReceivedEventHandler) Handle(ctx context.Context, cmd SaveReceivedE
 			WithField("event", cmd.event.String()).
 			WithField("address", cmd.relay.String()).
 			Message("event found in Bloom filter, skipping")
+		h.metrics.ReportDuplicateEventBloomFilter()
 		return nil
 	}
 
