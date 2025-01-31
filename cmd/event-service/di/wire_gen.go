@@ -241,3 +241,5 @@ func newCachedPublicKeySource(underlying *app.DatabasePublicKeySource) *app.Cach
 }
 
 var domainSet = wire.NewSet(domain.NewRelaysExtractor, wire.Bind(new(app.RelaysExtractor), new(*domain.RelaysExtractor)), domain.NewContactsExtractor, wire.Bind(new(app.ContactsExtractor), new(*domain.ContactsExtractor)))
+
+var applicationSet = wire.NewSet(wire.Struct(new(app.Application), "*"), app.NewSaveReceivedEventHandler, wire.Bind(new(memorypubsub2.SaveReceivedEventHandler), new(*app.SaveReceivedEventHandler)), app.NewProcessSavedEventHandler, wire.Bind(new(sqlitepubsub.ProcessSavedEventHandler), new(*app.ProcessSavedEventHandler)), app.NewUpdateMetricsHandler, app.NewAddPublicKeyToMonitorHandler, app.NewGetPublicKeyInfoHandler)

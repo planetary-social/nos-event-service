@@ -18,6 +18,8 @@ import (
 	"github.com/planetary-social/nos-event-service/service/domain"
 	"github.com/planetary-social/nos-event-service/service/domain/downloader"
 	"github.com/planetary-social/nos-event-service/service/domain/relays"
+	"github.com/planetary-social/nos-event-service/service/ports/memorypubsub"
+	"github.com/planetary-social/nos-event-service/service/ports/sqlitepubsub"
 )
 
 func BuildService(context.Context, config.Config) (Service, func(), error) {
@@ -148,17 +150,12 @@ var applicationSet = wire.NewSet(
 	wire.Struct(new(app.Application), "*"),
 
 	app.NewSaveReceivedEventHandler,
-	wire.Bind(new(app.SaveReceivedEventHandler), new(*app.SaveReceivedEventHandler)),
+	wire.Bind(new(memorypubsub.SaveReceivedEventHandler), new(*app.SaveReceivedEventHandler)),
 
 	app.NewProcessSavedEventHandler,
-	wire.Bind(new(app.ProcessSavedEventHandler), new(*app.ProcessSavedEventHandler)),
+	wire.Bind(new(sqlitepubsub.ProcessSavedEventHandler), new(*app.ProcessSavedEventHandler)),
 
 	app.NewUpdateMetricsHandler,
-	wire.Bind(new(app.UpdateMetricsHandler), new(*app.UpdateMetricsHandler)),
-
 	app.NewAddPublicKeyToMonitorHandler,
-	wire.Bind(new(app.AddPublicKeyToMonitorHandler), new(*app.AddPublicKeyToMonitorHandler)),
-
 	app.NewGetPublicKeyInfoHandler,
-	wire.Bind(new(app.GetPublicKeyInfoHandler), new(*app.GetPublicKeyInfoHandler)),
 )

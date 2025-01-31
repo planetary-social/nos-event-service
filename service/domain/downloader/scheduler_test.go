@@ -169,14 +169,6 @@ func TestTaskScheduler_ThereIsOneWindowOfDelayToLetRelaysSyncData(t *testing.T) 
 			assert.Equal(t, date(2023, time.December, 27, 10, 29, 00), lastWindow.End().UTC())
 		}
 	}, waitFor, tick)
-
-	firstWindowStart := date(2023, time.December, 27, 10, 14, 00)
-	var expectedWindows []downloader.TimeWindow
-	for i := 0; i < 16; i++ {
-		windowStart := firstWindowStart.Add(time.Duration(i) * time.Minute)
-		window := downloader.MustNewTimeWindow(windowStart, 1*time.Minute)
-		expectedWindows = append(expectedWindows, window)
-	}
 }
 
 func TestTaskScheduler_TerminatesTasks(t *testing.T) {
