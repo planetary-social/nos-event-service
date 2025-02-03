@@ -9,6 +9,8 @@ package di
 import (
 	"context"
 	"database/sql"
+	"testing"
+
 	"github.com/google/wire"
 	"github.com/planetary-social/nos-event-service/internal/fixtures"
 	"github.com/planetary-social/nos-event-service/internal/logging"
@@ -28,7 +30,6 @@ import (
 	memorypubsub2 "github.com/planetary-social/nos-event-service/service/ports/memorypubsub"
 	"github.com/planetary-social/nos-event-service/service/ports/sqlitepubsub"
 	"github.com/planetary-social/nos-event-service/service/ports/timer"
-	"testing"
 )
 
 // Injectors from wire.go:
