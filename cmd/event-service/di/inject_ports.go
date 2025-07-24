@@ -12,4 +12,5 @@ var portsSet = wire.NewSet(
 
 	memorypubsub.NewReceivedEventSubscriber,
 	timer.NewMetrics,
+	timer.NewCleanup,
 )

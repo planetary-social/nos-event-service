@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestProcessSavedEventHandler_DeletesEventAfterProcessing(t *testing.T) {
+func TestProcessSavedEventHandler_MarksEventAsProcessedAfterProcessing(t *testing.T) {
 	ctx := fixtures.TestContext(t)
 
 	// Create mocks
@@ -44,8 +44,12 @@ func TestProcessSavedEventHandler_DeletesEventAfterProcessing(t *testing.T) {
 	err = handler.Handle(ctx, app.NewProcessSavedEvent(event.Id()))
 	require.NoError(t, err)
 
-	// Verify the event was deleted
+	// Verify the event was marked as processed
+	require.Len(t, eventRepo.MarkAsProcessedCalls, 1, "event should be marked as processed")
+	require.Equal(t, event.Id(), eventRepo.MarkAsProcessedCalls[0].EventID)
+
+	// Verify the event still exists (not deleted)
 	exists, err := eventRepo.Exists(ctx, event.Id())
 	require.NoError(t, err)
-	require.False(t, exists, "event should be deleted after processing")
+	require.True(t, exists, "event should still exist after being marked as processed")
 }

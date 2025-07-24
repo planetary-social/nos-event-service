@@ -47,6 +47,12 @@ type EventRepository interface {
 
 	// Delete removes an event from storage. Returns nil if the event was deleted or didn't exist.
 	Delete(ctx context.Context, eventID domain.EventId) error
+
+	// MarkAsProcessed marks an event as processed with the current timestamp
+	MarkAsProcessed(ctx context.Context, eventID domain.EventId) error
+
+	// DeleteProcessedEventsBefore deletes all events that were processed before the given time
+	DeleteProcessedEventsBefore(ctx context.Context, before time.Time) (int, error)
 }
 
 type RelayRepository interface {
@@ -82,11 +88,12 @@ type ExternalEventPublisher interface {
 }
 
 type Application struct {
-	SaveReceivedEvent     *SaveReceivedEventHandler
-	ProcessSavedEvent     *ProcessSavedEventHandler
-	UpdateMetrics         *UpdateMetricsHandler
-	AddPublicKeyToMonitor *AddPublicKeyToMonitorHandler
-	GetPublicKeyInfo      *GetPublicKeyInfoHandler
+	SaveReceivedEvent      *SaveReceivedEventHandler
+	ProcessSavedEvent      *ProcessSavedEventHandler
+	UpdateMetrics          *UpdateMetricsHandler
+	AddPublicKeyToMonitor  *AddPublicKeyToMonitorHandler
+	GetPublicKeyInfo       *GetPublicKeyInfoHandler
+	CleanupProcessedEvents *CleanupProcessedEventsHandler
 }
 
 type ReceivedEvent struct {

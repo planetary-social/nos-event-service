@@ -23,6 +23,7 @@ type Service struct {
 	receivedEventSubscriber    *memorypubsub.ReceivedEventSubscriber
 	eventSavedEventSubscriber  *sqlitepubsub.EventSavedEventSubscriber
 	metricsTimer               *timer.Metrics
+	cleanupTimer               *timer.Cleanup
 	transactionRunner          *sqlite.TransactionRunner
 	taskScheduler              *downloader.TaskScheduler
 	migrationsRunner           *migrations.Runner
@@ -38,6 +39,7 @@ func NewService(
 	receivedEventSubscriber *memorypubsub.ReceivedEventSubscriber,
 	eventSavedEventSubscriber *sqlitepubsub.EventSavedEventSubscriber,
 	metricsTimer *timer.Metrics,
+	cleanupTimer *timer.Cleanup,
 	transactionRunner *sqlite.TransactionRunner,
 	taskScheduler *downloader.TaskScheduler,
 	migrationsRunner *migrations.Runner,
@@ -52,6 +54,7 @@ func NewService(
 		receivedEventSubscriber:    receivedEventSubscriber,
 		eventSavedEventSubscriber:  eventSavedEventSubscriber,
 		metricsTimer:               metricsTimer,
+		cleanupTimer:               cleanupTimer,
 		transactionRunner:          transactionRunner,
 		migrationsRunner:           migrationsRunner,
 		taskScheduler:              taskScheduler,
@@ -124,6 +127,12 @@ func (s Service) Run(ctx context.Context) error {
 	runners++
 	go func() {
 		errCh <- errors.Wrap(s.taskScheduler.Run(ctx), "task scheduler error")
+	}()
+
+	// The cleanup timer periodically removes processed events older than retention period
+	runners++
+	go func() {
+		errCh <- errors.Wrap(s.cleanupTimer.Run(ctx), "cleanup timer error")
 	}()
 
 	var compoundErr error

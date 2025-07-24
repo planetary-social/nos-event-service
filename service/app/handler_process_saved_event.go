@@ -96,11 +96,11 @@ func (h *ProcessSavedEventHandler) Handle(ctx context.Context, cmd ProcessSavedE
 		return errors.Wrapf(err, "error sending the event '%s' to relay", event.Id().Hex())
 	}
 
-	// Delete the event after successful processing
+	// Mark the event as processed instead of deleting immediately
 	if err := h.transactionProvider.Transact(ctx, func(ctx context.Context, adapters Adapters) error {
-		return adapters.Events.Delete(ctx, event.Id())
+		return adapters.Events.MarkAsProcessed(ctx, event.Id())
 	}); err != nil {
-		return errors.Wrap(err, "error deleting processed event")
+		return errors.Wrap(err, "error marking event as processed")
 	}
 
 	return nil

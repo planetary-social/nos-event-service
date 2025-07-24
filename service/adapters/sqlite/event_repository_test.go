@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/planetary-social/nos-event-service/internal"
 	"github.com/planetary-social/nos-event-service/internal/fixtures"
@@ -242,6 +243,104 @@ func TestEventRepository_Delete(t *testing.T) {
 		// Delete again should not error
 		err = adapters.EventRepository.Delete(ctx, event.Id())
 		require.NoError(t, err)
+
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func TestEventRepository_MarkAsProcessed(t *testing.T) {
+	ctx := fixtures.TestContext(t)
+	adapters := NewTestAdapters(ctx, t)
+
+	event := fixtures.SomeEvent()
+
+	// Save an event
+	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.EventRepository.Save(ctx, event)
+		require.NoError(t, err)
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Mark it as processed
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.EventRepository.MarkAsProcessed(ctx, event.Id())
+		require.NoError(t, err)
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Verify it still exists
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		exists, err := adapters.EventRepository.Exists(ctx, event.Id())
+		require.NoError(t, err)
+		require.True(t, exists)
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func TestEventRepository_DeleteProcessedEventsBefore(t *testing.T) {
+	ctx := fixtures.TestContext(t)
+	adapters := NewTestAdapters(ctx, t)
+
+	// Create and save multiple events
+	event1 := fixtures.SomeEvent()
+	event2 := fixtures.SomeEvent()
+	event3 := fixtures.SomeEvent()
+
+	err := adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.EventRepository.Save(ctx, event1)
+		require.NoError(t, err)
+		err = adapters.EventRepository.Save(ctx, event2)
+		require.NoError(t, err)
+		err = adapters.EventRepository.Save(ctx, event3)
+		require.NoError(t, err)
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Mark event1 and event2 as processed
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.EventRepository.MarkAsProcessed(ctx, event1.Id())
+		require.NoError(t, err)
+		return nil
+	})
+	require.NoError(t, err)
+
+	time.Sleep(100 * time.Millisecond) // Small delay to ensure different timestamps
+
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		err := adapters.EventRepository.MarkAsProcessed(ctx, event2.Id())
+		require.NoError(t, err)
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Delete processed events before "now" (should delete both event1 and event2)
+	err = adapters.TransactionProvider.Transact(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		deletedCount, err := adapters.EventRepository.DeleteProcessedEventsBefore(ctx, time.Now().Add(1*time.Second))
+		require.NoError(t, err)
+		require.Equal(t, 2, deletedCount)
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Verify event1 and event2 are deleted
+	err = adapters.TransactionProvider.ReadOnly(ctx, func(ctx context.Context, adapters sqlite.TestAdapters) error {
+		exists, err := adapters.EventRepository.Exists(ctx, event1.Id())
+		require.NoError(t, err)
+		require.False(t, exists)
+
+		exists, err = adapters.EventRepository.Exists(ctx, event2.Id())
+		require.NoError(t, err)
+		require.False(t, exists)
+
+		// Verify event3 still exists (was not processed)
+		exists, err = adapters.EventRepository.Exists(ctx, event3.Id())
+		require.NoError(t, err)
+		require.True(t, exists)
 
 		return nil
 	})

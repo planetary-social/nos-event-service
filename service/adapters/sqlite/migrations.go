@@ -12,6 +12,7 @@ func NewMigrations(fns *MigrationFns) (migrations.Migrations, error) {
 	return migrations.NewMigrations([]migrations.Migration{
 		migrations.MustNewMigration("initial", fns.Initial),
 		migrations.MustNewMigration("create_pubsub_tables", fns.CreatePubsubTables),
+		migrations.MustNewMigration("add_processed_at_column", fns.AddProcessedAtColumn),
 	})
 }
 
@@ -114,6 +115,25 @@ func (m *MigrationFns) CreatePubsubTables(ctx context.Context, state migrations.
 		if _, err := m.db.Exec(query); err != nil {
 			return errors.Wrapf(err, "error initializing pubsub")
 		}
+	}
+
+	return nil
+}
+
+func (m *MigrationFns) AddProcessedAtColumn(ctx context.Context, state migrations.State, saveStateFunc migrations.SaveStateFunc) error {
+	_, err := m.db.Exec(`
+		ALTER TABLE events ADD COLUMN processed_at INTEGER;
+	`)
+	if err != nil {
+		return errors.Wrap(err, "error adding processed_at column")
+	}
+
+	// Create index for efficient cleanup queries
+	_, err = m.db.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_events_processed_at ON events(processed_at);
+	`)
+	if err != nil {
+		return errors.Wrap(err, "error creating processed_at index")
 	}
 
 	return nil

@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/boreq/errors"
 	"github.com/planetary-social/nos-event-service/service/app"
@@ -145,4 +146,36 @@ func (r *EventRepository) Delete(ctx context.Context, eventID domain.EventId) er
 		return errors.Wrap(err, "error executing the delete query")
 	}
 	return nil
+}
+
+func (r *EventRepository) MarkAsProcessed(ctx context.Context, eventID domain.EventId) error {
+	_, err := r.tx.ExecContext(ctx, `
+	UPDATE events
+	SET processed_at = $1
+	WHERE event_id = $2`,
+		time.Now().Unix(),
+		eventID.Hex(),
+	)
+	if err != nil {
+		return errors.Wrap(err, "error marking event as processed")
+	}
+	return nil
+}
+
+func (r *EventRepository) DeleteProcessedEventsBefore(ctx context.Context, before time.Time) (int, error) {
+	result, err := r.tx.ExecContext(ctx, `
+	DELETE FROM events
+	WHERE processed_at IS NOT NULL AND processed_at < $1`,
+		before.Unix(),
+	)
+	if err != nil {
+		return 0, errors.Wrap(err, "error deleting processed events")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, errors.Wrap(err, "error getting rows affected")
+	}
+
+	return int(rowsAffected), nil
 }

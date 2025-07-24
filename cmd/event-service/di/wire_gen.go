@@ -75,12 +75,14 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	updateMetricsHandler := app.NewUpdateMetricsHandler(genericTransactionProvider, subscriber, logger, prometheusPrometheus, eventFilter)
 	addPublicKeyToMonitorHandler := app.NewAddPublicKeyToMonitorHandler(genericTransactionProvider, logger, prometheusPrometheus)
 	getPublicKeyInfoHandler := app.NewGetPublicKeyInfoHandler(genericTransactionProvider, logger, prometheusPrometheus)
+	cleanupProcessedEventsHandler := app.NewCleanupProcessedEventsHandler(genericTransactionProvider, logger, prometheusPrometheus)
 	application := app.Application{
-		SaveReceivedEvent:     saveReceivedEventHandler,
-		ProcessSavedEvent:     processSavedEventHandler,
-		UpdateMetrics:         updateMetricsHandler,
-		AddPublicKeyToMonitor: addPublicKeyToMonitorHandler,
-		GetPublicKeyInfo:      getPublicKeyInfoHandler,
+		SaveReceivedEvent:      saveReceivedEventHandler,
+		ProcessSavedEvent:      processSavedEventHandler,
+		UpdateMetrics:          updateMetricsHandler,
+		AddPublicKeyToMonitor:  addPublicKeyToMonitorHandler,
+		GetPublicKeyInfo:       getPublicKeyInfoHandler,
+		CleanupProcessedEvents: cleanupProcessedEventsHandler,
 	}
 	server := http.NewServer(configConfig, logger, application, prometheusPrometheus)
 	bootstrapRelaySource := relays.NewBootstrapRelaySource()
@@ -95,6 +97,7 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 	receivedEventSubscriber := memorypubsub2.NewReceivedEventSubscriber(receivedEventPubSub, saveReceivedEventHandler, logger)
 	eventSavedEventSubscriber := sqlitepubsub.NewEventSavedEventSubscriber(processSavedEventHandler, subscriber, logger, prometheusPrometheus)
 	metrics := timer.NewMetrics(application, logger)
+	timerCleanup := timer.NewCleanup(application, logger)
 	migrationsStorage, err := sqlite.NewMigrationsStorage(db)
 	if err != nil {
 		cleanup()
@@ -108,7 +111,7 @@ func BuildService(contextContext context.Context, configConfig config.Config) (S
 		return Service{}, nil, err
 	}
 	loggingMigrationsProgressCallback := adapters.NewLoggingMigrationsProgressCallback(logger)
-	service := NewService(application, server, downloaderDownloader, receivedEventSubscriber, eventSavedEventSubscriber, metrics, transactionRunner, taskScheduler, runner, migrationsMigrations, loggingMigrationsProgressCallback, logger)
+	service := NewService(application, server, downloaderDownloader, receivedEventSubscriber, eventSavedEventSubscriber, metrics, timerCleanup, transactionRunner, taskScheduler, runner, migrationsMigrations, loggingMigrationsProgressCallback, logger)
 	return service, func() {
 		cleanup()
 	}, nil
@@ -243,4 +246,4 @@ func newCachedPublicKeySource(underlying *app.DatabasePublicKeySource) *app.Cach
 
 var domainSet = wire.NewSet(domain.NewRelaysExtractor, wire.Bind(new(app.RelaysExtractor), new(*domain.RelaysExtractor)), domain.NewContactsExtractor, wire.Bind(new(app.ContactsExtractor), new(*domain.ContactsExtractor)))
 
-var applicationSet = wire.NewSet(wire.Struct(new(app.Application), "*"), app.NewSaveReceivedEventHandler, wire.Bind(new(memorypubsub2.SaveReceivedEventHandler), new(*app.SaveReceivedEventHandler)), app.NewProcessSavedEventHandler, wire.Bind(new(sqlitepubsub.ProcessSavedEventHandler), new(*app.ProcessSavedEventHandler)), app.NewUpdateMetricsHandler, app.NewAddPublicKeyToMonitorHandler, app.NewGetPublicKeyInfoHandler)
+var applicationSet = wire.NewSet(wire.Struct(new(app.Application), "*"), app.NewSaveReceivedEventHandler, wire.Bind(new(memorypubsub2.SaveReceivedEventHandler), new(*app.SaveReceivedEventHandler)), app.NewProcessSavedEventHandler, wire.Bind(new(sqlitepubsub.ProcessSavedEventHandler), new(*app.ProcessSavedEventHandler)), app.NewUpdateMetricsHandler, app.NewAddPublicKeyToMonitorHandler, app.NewGetPublicKeyInfoHandler, app.NewCleanupProcessedEventsHandler)
