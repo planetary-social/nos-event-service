@@ -2,9 +2,12 @@ package di
 
 import (
 	"context"
+	"os"
+	"time"
 
 	"github.com/boreq/errors"
 	"github.com/hashicorp/go-multierror"
+	"github.com/planetary-social/nos-event-service/internal/goroutine"
 	"github.com/planetary-social/nos-event-service/internal/logging"
 	"github.com/planetary-social/nos-event-service/internal/migrations"
 	"github.com/planetary-social/nos-event-service/service/adapters/sqlite"
@@ -72,6 +75,8 @@ func (s Service) ExecuteMigrations(ctx context.Context) error {
 	return s.migrationsRunner.Run(ctx, s.migrations, s.migrationsProgressCallback)
 }
 
+const shutdownTimeout = 30 * time.Second
+
 func (s Service) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -81,23 +86,23 @@ func (s Service) Run(ctx context.Context) error {
 
 	runners++
 	// Serve http
-	go func() {
-		errCh <- errors.Wrap(s.server.ListenAndServe(ctx), "server error")
-	}()
+	goroutine.Run(s.logger, errCh, func() error {
+		return errors.Wrap(s.server.ListenAndServe(ctx), "server error")
+	})
 
 	// Fetch events from the database relays and send them to the in memory pubsub
 	runners++
-	go func() {
-		errCh <- errors.Wrap(s.downloader.Run(ctx), "downloader error")
-	}()
+	goroutine.Run(s.logger, errCh, func() error {
+		return errors.Wrap(s.downloader.Run(ctx), "downloader error")
+	})
 
 	// Subscribe to the in memory pubsub of events, emit a NewSaveReceivedEvent
 	// command that will make some checks on the event, save it if the check
 	// passes and emit a EventSavedEvent to the sqlite pubsub.
 	runners++
-	go func() {
-		errCh <- errors.Wrap(s.receivedEventSubscriber.Run(ctx), "received event subscriber error")
-	}()
+	goroutine.Run(s.logger, errCh, func() error {
+		return errors.Wrap(s.receivedEventSubscriber.Run(ctx), "received event subscriber error")
+	})
 
 	// Subscribe to saved events in the database. This uses the sqlite pubsub. This triggers:
 	// - analysis to extract new relays and store them in db. They will be used by the downloader.
@@ -105,42 +110,59 @@ func (s Service) Run(ctx context.Context) error {
 	// - publish to watermill pubsub
 	// - may publish the event in wss://relay.nos.social if they are metadata related
 	runners++
-	go func() {
-		errCh <- errors.Wrap(s.eventSavedEventSubscriber.Run(ctx), "event saved subscriber error")
-	}()
+	goroutine.Run(s.logger, errCh, func() error {
+		return errors.Wrap(s.eventSavedEventSubscriber.Run(ctx), "event saved subscriber error")
+	})
 
 	// The metrics timer collects metrics from the app.
 	runners++
-	go func() {
-		errCh <- errors.Wrap(s.metricsTimer.Run(ctx), "metrics timer error")
-	}()
+	goroutine.Run(s.logger, errCh, func() error {
+		return errors.Wrap(s.metricsTimer.Run(ctx), "metrics timer error")
+	})
 
 	// Sqlite transaction runner
 	runners++
-	go func() {
-		errCh <- errors.Wrap(s.transactionRunner.Run(ctx), "transaction runner error")
-	}()
+	goroutine.Run(s.logger, errCh, func() error {
+		return errors.Wrap(s.transactionRunner.Run(ctx), "transaction runner error")
+	})
 
 	// The task scheduler creates sequential time window based tasks that
 	// contain filters to be applied to each relay to fetch the events we want.
 	// Event downloaders subscribe to this.
 	runners++
-	go func() {
-		errCh <- errors.Wrap(s.taskScheduler.Run(ctx), "task scheduler error")
-	}()
+	goroutine.Run(s.logger, errCh, func() error {
+		return errors.Wrap(s.taskScheduler.Run(ctx), "task scheduler error")
+	})
 
 	// The cleanup timer periodically removes processed events older than retention period
 	runners++
-	go func() {
-		errCh <- errors.Wrap(s.cleanupTimer.Run(ctx), "cleanup timer error")
-	}()
+	goroutine.Run(s.logger, errCh, func() error {
+		return errors.Wrap(s.cleanupTimer.Run(ctx), "cleanup timer error")
+	})
 
+	// Wait for the first runner to exit.
+	firstErr := <-errCh
+	s.logger.Error().WithError(firstErr).Message("first runner terminated, shutting down")
+	cancel()
+
+	// Collect remaining errors with a timeout to prevent zombie processes.
 	var compoundErr error
-	for i := 0; i < runners; i++ {
-		err := errors.Wrap(<-errCh, "error returned by runner")
-		s.logger.Error().WithError(err).Message("runner terminated")
-		compoundErr = multierror.Append(compoundErr, err)
-		cancel()
+	compoundErr = multierror.Append(compoundErr, errors.Wrap(firstErr, "error returned by runner"))
+
+	timer := time.NewTimer(shutdownTimeout)
+	defer timer.Stop()
+
+	for i := 1; i < runners; i++ {
+		select {
+		case err := <-errCh:
+			err = errors.Wrap(err, "error returned by runner")
+			s.logger.Error().WithError(err).Message("runner terminated")
+			compoundErr = multierror.Append(compoundErr, err)
+		case <-timer.C:
+			s.logger.Error().Message("shutdown timeout exceeded, forcing exit")
+			os.Exit(1)
+		}
 	}
+
 	return compoundErr
 }

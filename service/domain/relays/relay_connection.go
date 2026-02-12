@@ -150,7 +150,7 @@ func (r *RelayConnection) GetEvents(ctx context.Context, filter domain.Filter) (
 		// Context is cancelled from a task.CheckIfDoneAndEnd() triggered from EOSE messages
 		<-ctx.Done()
 		if err := r.removeSubscriptionChannel(ch); err != nil {
-			panic(err)
+			r.logger.Error().WithError(err).Message("error removing subscription channel")
 		}
 	}()
 
@@ -176,7 +176,7 @@ func (r *RelayConnection) SendEvent(ctx context.Context, event domain.Event) err
 
 	defer func() {
 		if err := r.removeEventChannel(event, ch); err != nil {
-			panic(err)
+			r.logger.Error().WithError(err).Message("error removing event channel")
 		}
 	}()
 
@@ -303,12 +303,18 @@ func (r *RelayConnection) run(ctx context.Context) error {
 	r.setState(RelayConnectionStateConnected)
 	r.logger.Trace().Message("connected")
 
+	var wg sync.WaitGroup
+
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		<-ctx.Done()
 		_ = conn.Close()
 	}()
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		if err := r.manageSubs(ctx, conn); err != nil {
 			if !r.writeErrorShouldNotBeLogged(err) {
 				r.logger.Error().
@@ -318,7 +324,9 @@ func (r *RelayConnection) run(ctx context.Context) error {
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		// Loops through newEventsCh and sends events to the relay
 		if err := r.sendEvents(ctx, conn); err != nil {
 			if !r.writeErrorShouldNotBeLogged(err) {
@@ -329,15 +337,17 @@ func (r *RelayConnection) run(ctx context.Context) error {
 		}
 	}()
 
+	var readErr error
 	for {
 		messageBytes, err := conn.ReadMessage()
 		if err != nil {
-			return NewReadMessageError(err)
+			readErr = NewReadMessageError(err)
+			break
 		}
 
 		if r.state == RelayConnectionStateBackPressured {
-			// Load shedding under backpressure, we just disconnect
-			return BackPressureError
+			readErr = BackPressureError
+			break
 		}
 
 		if err := r.handleMessage(messageBytes); err != nil {
@@ -348,6 +358,10 @@ func (r *RelayConnection) run(ctx context.Context) error {
 				Message("error handling an incoming message")
 		}
 	}
+
+	cancel()
+	wg.Wait()
+	return readErr
 }
 
 func (r *RelayConnection) writeErrorShouldNotBeLogged(err error) bool {
